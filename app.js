@@ -19,6 +19,27 @@ canvas.tabIndex = 0;
 var context = canvas.getContext('2d');
 var fps = targetFps;
 
+var cellWidth = 6;
+var cellHeight = 6;
+var gridWidth = Math.floor(canvas.width / cellWidth);
+var gridHeight = Math.floor(canvas.height / cellHeight);
+var grid = new Array(gridHeight);
+var colors = [
+  '#48C13C', // safe
+  '#860600', // fatal
+  '#F30B00', // danger
+  '#548FC4', // clean water
+  '#6D2A49', // contaminated water
+];
+
+for (var y = 0; y < gridHeight; ++y) {
+  var row;
+  grid[y] = row = new Array(gridWidth);
+  for (var x = 0; x < gridWidth; ++x) {
+    row[x] = Math.floor(Math.random() * colors.length);
+  }
+}
+
 startMainLoop();
 
 function startMainLoop() {
@@ -49,6 +70,11 @@ function nextFrame(dt, multiplier) {
 }
 
 function draw() {
-  context.fillStyle = '#ff0000';
-  context.fillRect(10, 10, 55, 50);
+  for (var y = 0; y < gridHeight; ++y) {
+    var row = grid[y];
+    for (var x = 0; x < gridWidth; ++x) {
+      context.fillStyle = colors[row[x]];
+      context.fillRect(x * cellWidth, y * cellHeight, cellWidth, cellHeight);
+    }
+  }
 }
