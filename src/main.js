@@ -38,7 +38,8 @@ window.Chem.onReady(function () {
 
   var startSize = v(4, 4);
   var startPos = v(gridWidth / 2, gridHeight / 2).floor();
-  var zoom = v(1, 1);
+  var zoom = v(3, 3);
+  var scroll = v(0, 0);
 
   for (var y = startPos.y - startSize.y; y < startPos.y + startSize.y; ++y) {
     for (var x = startPos.x - startSize.x; x < startPos.x + startSize.x; ++x) {
@@ -50,27 +51,52 @@ window.Chem.onReady(function () {
   createCrewMember("Gaby", "lady", startPos.offset(0, -2));
   createCrewMember("Andy", "man", startPos.offset(0, 2));
 
-  engine.on('update', function (dt, dx) {});
+  engine.on('update', function (dt, dx) {
+    if (engine.buttonState(Chem.Button.Key_Left)) {
+      scroll.x -= 10;
+    } else if (engine.buttonState(Chem.Button.Key_Right)) {
+      scroll.x += 10;
+    }
+    if (engine.buttonState(Chem.Button.Key_Up)) {
+      scroll.y -= 10;
+    } else if (engine.buttonState(Chem.Button.Key_Down)) {
+      scroll.y += 10;
+    }
+  });
   engine.on('draw', function (context) {
-    for (var y = 0; y < gridHeight; ++y) {
-      var row = grid[y];
-      for (var x = 0; x < gridWidth; ++x) {
-        context.fillStyle = row[x].color;
-        var pos = toScreen(v(x, y));
-        var size = toScreen(v(1, 1));
+    context.fillStyle = '#000000'
+    context.fillRect(0, 0, engine.size.x, engine.size.y);
+    var start = fromScreen(v(0, 0)).floor();
+    var end = fromScreen(engine.size).apply(Math.ceil);
+    if (start.x < 0) start.x = 0;
+    if (start.y < 0) start.y = 0;
+    if (end.x >= gridWidth) end.x = gridWidth - 1;
+    if (end.y >= gridHeight) end.y = gridHeight - 1;
+    var it = v();
+    var size = sizeToScreen(v(1, 1));
+    for (it.y = start.y; it.y < end.y; it.y += 1) {
+      var row = grid[it.y];
+      for (it.x = start.x; it.x < end.x; it.x += 1) {
+        context.fillStyle = row[it.x].color;
+        var pos = toScreen(it);
         context.fillRect(pos.x, pos.y, size.x, size.y);
       }
     }
     // draw all sprites in batch
+    var id, member, screenPos;
+    for (id in crew) {
+      member = crew[id]
+      member.sprite.pos = toScreen(member.pos);
+    }
     engine.draw(batch);
 
     // draw crew names and health
     context.fillStyle = '#000000';
     context.textAlign = 'center';
-    for (var id in crew) {
-      var member = crew[id];
-      var screenPos = toScreen(member.pos);
-      context.fillText(member.name, screenPos.x, screenPos.y - 15);
+    for (id in crew) {
+      member = crew[id];
+      context.fillText(member.name,
+          member.sprite.pos.x, member.sprite.pos.y - 15);
     }
 
     // draw a little fps counter in the corner
@@ -81,11 +107,17 @@ window.Chem.onReady(function () {
   canvas.focus();
 
   function toScreen(vec) {
+    return v(vec.x * cellSize.x * zoom.x - scroll.x,
+        vec.y * cellSize.y * zoom.y - scroll.y);
+  }
+
+  function sizeToScreen(vec) {
     return v(vec.x * cellSize.x * zoom.x, vec.y * cellSize.y * zoom.y);
   }
 
   function fromScreen(vec) {
-    return v(vec.x / cellSize.x / zoom.x, vec.y / cellSize.y / zoom.y);
+    return v((vec.x + scroll.x) / cellSize.x / zoom.x,
+        (vec.y + scroll.y) / cellSize.y / zoom.y);
   }
 
   function createCrewMember(name, graphic, pos) {
