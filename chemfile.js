@@ -11,11 +11,15 @@ exports.spritesheet = {
     delay: 0.05,
     loop: false,
     // possible values: a Vec2d instance, or one of:
-    // ["center", "topleft", "topright", "bottomleft", "bottomright"]
+    // ["center", "topleft", "topright", "bottomleft", "bottomright", "top", "right", "left", "bottom"]
     anchor: "center"
   },
   animations: {
-    lady: {},
-    man: {},
+    lady: {
+      anchor: 'bottom',
+    },
+    man: {
+      anchor: 'bottom',
+    },
   }
 };

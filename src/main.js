@@ -51,6 +51,23 @@ window.Chem.onReady(function () {
   createCrewMember("Gaby", "lady", startPos.offset(0, -2));
   createCrewMember("Andy", "man", startPos.offset(0, 2));
 
+  engine.on('buttondown', function(button) {
+    var pos = engine.mouse_pos;
+    if (button === Chem.Button.Mouse_Left) {
+      for (var id in crew) {
+        var member = crew[id];
+        var sprite = member.sprite;
+        var selected = (
+          pos.x >= sprite.pos.x - sprite.size.x / 2 &&
+          pos.x <= sprite.pos.x + sprite.size.x / 2 &&
+          pos.y >= sprite.pos.y - sprite.size.y &&
+          pos.y <= sprite.pos.y);
+        var shift = engine.buttonState(Chem.Button.Key_Shift) || engine.buttonState(Chem.Button.Key_Ctrl);
+        member.selected = (shift ? member.selected : false) || selected;
+      }
+    }
+  });
+
   engine.on('update', function (dt, dx) {
     if (engine.buttonState(Chem.Button.Key_Left)) {
       scroll.x -= 10;
@@ -91,12 +108,18 @@ window.Chem.onReady(function () {
     engine.draw(batch);
 
     // draw crew names and health
-    context.fillStyle = '#000000';
+    // but only if selected
     context.textAlign = 'center';
+    var healthBarSize = v(32, 4);
     for (id in crew) {
       member = crew[id];
+      if (!member.selected) continue;
+      context.fillStyle = '#000000';
       context.fillText(member.name,
-          member.sprite.pos.x, member.sprite.pos.y - 15);
+          member.sprite.pos.x, member.sprite.pos.y - member.sprite.size.y - 5);
+      context.fillStyle = '#009413';
+      context.fillRect(member.sprite.pos.x - healthBarSize.x / 2,
+          member.sprite.pos.y - member.sprite.size.y - healthBarSize.y / 2, healthBarSize.x, healthBarSize.y);
     }
 
     // draw a little fps counter in the corner
