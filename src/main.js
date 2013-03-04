@@ -84,7 +84,7 @@ window.Chem.onReady(function () {
     context.fillStyle = '#000000'
     context.fillRect(0, 0, engine.size.x, engine.size.y);
     var start = fromScreen(v(0, 0)).floor();
-    var end = fromScreen(engine.size).apply(Math.ceil);
+    var end = fromScreen(engine.size).ceil();
     if (start.x < 0) start.x = 0;
     if (start.y < 0) start.y = 0;
     if (end.x >= gridWidth) end.x = gridWidth - 1;
