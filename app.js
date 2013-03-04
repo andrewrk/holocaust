@@ -23,27 +23,22 @@ var landType = {
   safe: {
     name: "Safe",
     color: '#48C13C',
-    weight: 0.25,
   },
   fatal: {
     name: "Fatal",
     color: '#860600',
-    weight: 0.25,
   },
   danger: {
     name: "Danger",
     color: '#F30B00',
-    weight: 0.36,
   },
   cleanWater: {
     name: "Clean Water",
     color: '#548FC4',
-    weight: 0.06,
   },
   contaminatedWater: {
     name: "Contaminated Water",
     color: '#6D2A49',
-    weight: 0.08,
   },
 };
 
@@ -58,45 +53,23 @@ var perlinNoise = generatePerlinNoise(gridWidth, gridHeight);
 var terrainThresholds = [
   {
     terrain: landType.fatal,
-    threshold: 0.15,
-  },
-  {
-    terrain: landType.contaminatedWater,
-    threshold: 0.23,
+    weight: 0.20,
   },
   {
     terrain: landType.danger,
-    threshold: 0.35,
-  },
-  {
-    terrain: landType.cleanWater,
-    threshold: 0.38,
+    weight: 0.50,
   },
   {
     terrain: landType.safe,
-    threshold: 0.52,
-  },
-  {
-    terrain: landType.danger,
-    threshold: 0.66,
-  },
-  {
-    terrain: landType.cleanWater,
-    threshold: 0.69,
-  },
-  {
-    terrain: landType.safe,
-    threshold: 0.80,
-  },
-  {
-    terrain: landType.danger,
-    threshold: 0.90,
-  },
-  {
-    terrain: landType.fatal,
-    threshold: 1.00,
+    weight: 0.30,
   },
 ];
+
+var sum = 0;
+terrainThresholds.forEach(function(item) {
+  sum += item.weight;
+  item.threshold = sum;
+});
 
 var grid = createArray(gridWidth, gridHeight);
 for (var y = 0; y < gridHeight; ++y) {
@@ -155,9 +128,9 @@ function draw() {
 
 function generatePerlinNoise(width, height, options) {
   options = options || {};
-  var octaveCount = options.octaveCount || 8;
+  var octaveCount = options.octaveCount || 5;
   var amplitude = options.amplitude || 0.5;
-  var persistence = options.persistence || 0.5;
+  var persistence = options.persistence || 0.2;
   var whiteNoise = generateWhiteNoise(gridWidth, gridHeight);
 
   var smoothNoiseList = new Array(octaveCount);
