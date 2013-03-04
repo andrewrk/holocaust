@@ -1,0 +1,13 @@
+{
+  "name": "holocaust",
+  "version": "0.0.0",
+  "description": "game",
+  "scripts": {
+    "dev": "npm install && chem dev"
+  },
+  "author": "Andrew Kelley <superjoe30@gmail.com>",
+  "license": "BSD",
+  "dependencies": {
+    "chem": "~0.2.0"
+  }
+}
