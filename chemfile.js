@@ -15,6 +15,7 @@ exports.spritesheet = {
     anchor: "center"
   },
   animations: {
-    ship: {}
+    lady: {},
+    man: {},
   }
 };

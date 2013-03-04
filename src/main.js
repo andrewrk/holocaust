@@ -36,16 +36,19 @@ window.Chem.onReady(function () {
   };
   var grid = gridFromPerlinNoise();
 
+  var startSize = v(4, 4);
   var startPos = v(gridWidth / 2, gridHeight / 2).floor();
-  for (var y = startPos.y - 5; y < startPos.y + 5; ++y) {
-    for (var x = startPos.x - 5; x < startPos.x + 5; ++x) {
+  var zoom = v(1, 1);
+
+  for (var y = startPos.y - startSize.y; y < startPos.y + startSize.y; ++y) {
+    for (var x = startPos.x - startSize.x; x < startPos.x + startSize.x; ++x) {
       grid[y][x] = landType.safe;
     }
   }
-  createCrewMember("Dean", startPos.offset(-1, 0));
-  createCrewMember("Hank", startPos.offset(1, 0));
-  createCrewMember("Gaby", startPos.offset(0, -1));
-  createCrewMember("Andy", startPos.offset(0, 1));
+  createCrewMember("Dean", "man", startPos.offset(-2, 0));
+  createCrewMember("Hank", "man", startPos.offset(2, 0));
+  createCrewMember("Gaby", "lady", startPos.offset(0, -2));
+  createCrewMember("Andy", "man", startPos.offset(0, 2));
 
   engine.on('update', function (dt, dx) {});
   engine.on('draw', function (context) {
@@ -53,11 +56,22 @@ window.Chem.onReady(function () {
       var row = grid[y];
       for (var x = 0; x < gridWidth; ++x) {
         context.fillStyle = row[x].color;
-        context.fillRect(x * cellSize.x, y * cellSize.y, cellSize.x, cellSize.y);
+        var pos = toScreen(v(x, y));
+        var size = toScreen(v(1, 1));
+        context.fillRect(pos.x, pos.y, size.x, size.y);
       }
     }
     // draw all sprites in batch
     engine.draw(batch);
+
+    // draw crew names and health
+    context.fillStyle = '#000000';
+    context.textAlign = 'center';
+    for (var id in crew) {
+      var member = crew[id];
+      var screenPos = toScreen(member.pos);
+      context.fillText(member.name, screenPos.x, screenPos.y - 15);
+    }
 
     // draw a little fps counter in the corner
     context.fillStyle = '#000000'
@@ -66,14 +80,22 @@ window.Chem.onReady(function () {
   engine.start();
   canvas.focus();
 
-  function createCrewMember(name, pos) {
+  function toScreen(vec) {
+    return v(vec.x * cellSize.x * zoom.x, vec.y * cellSize.y * zoom.y);
+  }
+
+  function fromScreen(vec) {
+    return v(vec.x / cellSize.x / zoom.x, vec.y / cellSize.y / zoom.y);
+  }
+
+  function createCrewMember(name, graphic, pos) {
     var id = "" + Math.random();
     crew[id] = {
       id: id,
       name: name,
       health: 1,
       pos: pos.clone(),
-      sprite: new Chem.Sprite('ship', {
+      sprite: new Chem.Sprite(graphic, {
         batch: batch,
         pos: pos.times(cellSize),
       }),
@@ -121,8 +143,8 @@ window.Chem.onReady(function () {
   }
   function generatePerlinNoise(width, height, options) {
     options = options || {};
-    var octaveCount = options.octaveCount || 5;
-    var amplitude = options.amplitude || 0.5;
+    var octaveCount = options.octaveCount || 4;
+    var amplitude = options.amplitude || 0.1;
     var persistence = options.persistence || 0.2;
     var whiteNoise = generateWhiteNoise(gridWidth, gridHeight);
 
