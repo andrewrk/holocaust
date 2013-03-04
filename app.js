@@ -124,6 +124,8 @@ function draw() {
       context.fillRect(x * cellWidth, y * cellHeight, cellWidth, cellHeight);
     }
   }
+  context.fillStyle = '#000000';
+  context.fillText(Math.round(fps) + " fps", 0, canvas.height);
 }
 
 function generatePerlinNoise(width, height, options) {
