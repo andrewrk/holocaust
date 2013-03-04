@@ -8,10 +8,9 @@ window.Chem.onReady(function () {
 
   engine.setSize(v(1067, 600));
 
-  var cellWidth = 6;
-  var cellHeight = 6;
-  var gridWidth = Math.floor(canvas.width / cellWidth);
-  var gridHeight = Math.floor(canvas.height / cellHeight);
+  var cellSize = v(6, 6);
+  var gridWidth = Math.floor(canvas.width / cellSize.x);
+  var gridHeight = Math.floor(canvas.height / cellSize.y);
   var crew = {};
   var landType = {
     safe: {
@@ -37,7 +36,12 @@ window.Chem.onReady(function () {
   };
   var grid = gridFromPerlinNoise();
 
-  var startPos = v(gridWidth / 2, gridHeight / 2);
+  var startPos = v(gridWidth / 2, gridHeight / 2).floor();
+  for (var y = startPos.y - 5; y < startPos.y + 5; ++y) {
+    for (var x = startPos.x - 5; x < startPos.x + 5; ++x) {
+      grid[y][x] = landType.safe;
+    }
+  }
   createCrewMember("Dean", startPos.offset(-1, 0));
   createCrewMember("Hank", startPos.offset(1, 0));
   createCrewMember("Gaby", startPos.offset(0, -1));
@@ -49,7 +53,7 @@ window.Chem.onReady(function () {
       var row = grid[y];
       for (var x = 0; x < gridWidth; ++x) {
         context.fillStyle = row[x].color;
-        context.fillRect(x * cellWidth, y * cellHeight, cellWidth, cellHeight);
+        context.fillRect(x * cellSize.x, y * cellSize.y, cellSize.x, cellSize.y);
       }
     }
     // draw all sprites in batch
@@ -69,6 +73,10 @@ window.Chem.onReady(function () {
       name: name,
       health: 1,
       pos: pos.clone(),
+      sprite: new Chem.Sprite('ship', {
+        batch: batch,
+        pos: pos.times(cellSize),
+      }),
     };
   }
 
