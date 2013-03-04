@@ -39,7 +39,7 @@ window.Chem.onReady(function () {
   var startSize = v(4, 4);
   var startPos = v(gridWidth / 2, gridHeight / 2).floor();
   var zoom = v(3, 3);
-  var scroll = v(0, 0);
+  var scroll = engine.size.clone();
 
   for (var y = startPos.y - startSize.y; y < startPos.y + startSize.y; ++y) {
     for (var x = startPos.x - startSize.x; x < startPos.x + startSize.x; ++x) {
