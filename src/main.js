@@ -72,15 +72,16 @@ window.Chem.onReady(function () {
 
   engine.on('update', function (dt, dx) {
     if (engine.buttonState(Chem.Button.Key_Left)) {
-      scroll.x -= 10;
+      scroll.x -= 10 * dx;
     } else if (engine.buttonState(Chem.Button.Key_Right)) {
-      scroll.x += 10;
+      scroll.x += 10 * dx;
     }
     if (engine.buttonState(Chem.Button.Key_Up)) {
-      scroll.y -= 10;
+      scroll.y -= 10 * dx;
     } else if (engine.buttonState(Chem.Button.Key_Down)) {
-      scroll.y += 10;
+      scroll.y += 10 * dx;
     }
+    scroll.floor();
   });
   engine.on('draw', function (context) {
     context.fillStyle = '#000000'
