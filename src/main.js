@@ -1,6 +1,8 @@
 //depend "chem"
+//depend "astar"
 window.Chem.onReady(function () {
   var Chem = window.Chem
+    , aStar = window.aStar
     , v = Chem.Vec2d
     , canvas = document.getElementById("game")
     , engine = new Chem.Engine(canvas)
@@ -84,8 +86,15 @@ window.Chem.onReady(function () {
     }
     scroll.floor();
 
-    for (var id in crew) {
-      var member = crew[id];
+    var filledAreas = {};
+    var id, member;
+    for (id in crew) {
+      member = crew[id];
+      filledAreas[member.pos.floored()] = member;
+    }
+
+    for (id in crew) {
+      member = crew[id];
 
       // explore areas around crew members
       for (var y = -crewLosRadius; y < crewLosRadius; ++y) {
@@ -101,20 +110,79 @@ window.Chem.onReady(function () {
 
       // crew member physics
       var vel = member.inputs.direction.scaled(member.inputs.speed * dx);
-      member.pos.add(vel);
+      var newPos = member.pos.plus(vel);
+      var newPosFloored = newPos.floored();
+      var entity = filledAreas[newPosFloored];
+      if (!entity || entity === member) {
+        member.pos = newPos;
+      }
 
       // crew member AI
       if (member.task && member.task.name === 'walk') {
-        var dest = member.task.pos;
-        if (dest.distanceTo(member.pos) < crewMaxSpeed) {
-          member.pos = dest;
-          member.inputs.speed = 0;
-          member.task = null;
-        } else {
-          member.inputs.direction = dest.minus(member.pos).normalize();
-          member.inputs.speed = crewMaxSpeed;
+        if (member.task.state === 'off') {
+          // compute path
+          var results = aStar({
+            start: member.pos.floored(),
+            isEnd: createIsEnd(member),
+            neighbor: neighborFn,
+            distance: distanceFn,
+            heuristic: createHeuristicFn(member),
+            timeout: 50,
+          });
+          member.task.state = 'path';
+          member.task.path = results.path;
+        }
+        if (member.task.state === 'path') {
+          var nextNode = member.task.path[0].offset(0.5, 0.5);
+          if (nextNode.distanceTo(member.pos) < crewMaxSpeed) {
+            member.task.path.shift();
+            if (member.task.path.length === 0) {
+              // arrived
+              member.pos = nextNode;
+              member.task = null;
+              member.inputs.speed = 0;
+            }
+          } else {
+            member.inputs.direction = nextNode.minus(member.pos).normalize();
+            member.inputs.speed = crewMaxSpeed;
+          }
         }
       }
+    }
+    function createHeuristicFn(member) {
+      return function (node) {
+        return node.distanceTo(member.task.pos);
+      };
+    }
+    function distanceFn(a, b) {
+      return a.distanceTo(b);
+    }
+    function neighborFn(node) {
+      var cells = [];
+      var leftSafe = addIfSafe(v(-1, 0));
+      var rightSafe = addIfSafe(v(1, 0));
+      var topSafe = addIfSafe(v(0, -1));
+      var bottomSafe = addIfSafe(v(0, 1));
+      // add the corners if safe
+      if (leftSafe && topSafe) addIfSafe(v(-1, -1));
+      if (rightSafe && topSafe) addIfSafe(v(1, -1));
+      if (leftSafe && bottomSafe) addIfSafe(v(-1, 1));
+      if (rightSafe && bottomSafe) addIfSafe(v(1, 1));
+      return cells;
+
+      function addIfSafe(vec) {
+        var pt = node.plus(vec);
+        var terrain = grid[pt.y][pt.x].terrain;
+        var entity = filledAreas[pt];
+        var safe = terrain === landType.safe && !entity;
+        if (safe) cells.push(pt);
+        return safe;
+      }
+    }
+    function createIsEnd(member) {
+      return function(node) {
+        return node.equals(member.task.pos.floored());
+      };
     }
   });
   engine.on('draw', function (context) {
@@ -159,6 +227,12 @@ window.Chem.onReady(function () {
           member.sprite.pos.y - member.sprite.size.y - healthBarSize.y / 2, healthBarSize.x, healthBarSize.y);
     }
 
+    // highlight the square you're mouse overing
+    var mouseCellPos = toScreen(fromScreen(engine.mouse_pos).floor());
+    var mouseCellSize = sizeToScreen(v(1, 1));
+    context.strokeStyle = '#ffffff';
+    context.strokeRect(mouseCellPos.x, mouseCellPos.y, mouseCellSize.x, mouseCellSize.y);
+
     // mini map
     // border
     context.fillStyle = '#ffffff';
@@ -191,7 +265,7 @@ window.Chem.onReady(function () {
   }
 
   function onMapRightClick() {
-    var pos = fromScreen(engine.mouse_pos);
+    var pos = fromScreen(engine.mouse_pos).floor().offset(0.5, 0.5);
     for (var id in crew) {
       var member = crew[id];
       if (member.selected) {
