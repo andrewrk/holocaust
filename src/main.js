@@ -21,26 +21,32 @@ window.Chem.onReady(function () {
     safe: {
       name: "Safe",
       color: '#48C13C',
+      walkable: true,
     },
     fatal: {
       name: "Fatal",
       color: '#860600',
+      walkable: true,
     },
     danger: {
       name: "Danger",
       color: '#F30B00',
+      walkable: true,
     },
     cleanWater: {
       name: "Clean Water",
       color: '#548FC4',
+      walkable: false,
     },
     contaminatedWater: {
       name: "Contaminated Water",
       color: '#6D2A49',
+      walkable: false,
     },
     fatalWater: {
       name: "Fatal Water",
       color: '#350024',
+      walkable: false,
     },
   };
   var grid = gridFromPerlinNoise();
@@ -130,7 +136,8 @@ window.Chem.onReady(function () {
       var newPos = member.pos.plus(vel);
       var newPosFloored = newPos.floored();
       var entity = filledAreas[newPosFloored];
-      if (!entity || entity === member) {
+      var newTerrain = grid[newPosFloored.y][newPosFloored.x].terrain;
+      if ((!entity || entity === member) && newTerrain.walkable) {
         member.pos = newPos;
       }
 
