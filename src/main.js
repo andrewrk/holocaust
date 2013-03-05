@@ -13,7 +13,7 @@ window.Chem.onReady(function () {
   var gridHeight = Math.floor(canvas.height / cellSize.y);
   var gridSize = v(gridWidth, gridHeight);
   var crew = {};
-  var crewLosRadius = 3;
+  var crewLosRadius = 4;
   var landType = {
     safe: {
       name: "Safe",
@@ -45,9 +45,10 @@ window.Chem.onReady(function () {
   var miniMapPos = engine.size.minus(gridSize).offset(-2, -2);
   var miniMapBoxSize = v();
 
+  // make a safe area to start out on
   for (var y = startPos.y - startSize.y; y < startPos.y + startSize.y; ++y) {
     for (var x = startPos.x - startSize.x; x < startPos.x + startSize.x; ++x) {
-      grid[y][x] = landType.safe;
+      grid[y][x].terrain = landType.safe;
     }
   }
   createCrewMember("Dean", "man", startPos.offset(-2, 0));
@@ -98,7 +99,25 @@ window.Chem.onReady(function () {
       scroll = engine.mouse_pos.minus(miniMapPos).minus(miniMapBoxSize.scaled(0.5)).times(cellSize).times(zoom);
     }
     scroll.floor();
+
+    // explore areas around crew members
+    for (var id in crew) {
+      var member = crew[id];
+      for (var y = -crewLosRadius; y < crewLosRadius; ++y) {
+        for (var x = -crewLosRadius; x < crewLosRadius; ++x) {
+          var targetPos = member.pos.offset(x, y);
+          if (targetPos.distanceTo(member.pos) <= crewLosRadius) {
+            if (!grid[targetPos.y][targetPos.x].explored) {
+              explore(member, targetPos);
+            }
+          }
+        }
+      }
+    }
   });
+  function explore(crewMember, pos) {
+    grid[pos.y][pos.x].explored = true;
+  }
   engine.on('draw', function (context) {
     context.fillStyle = '#000000'
     context.fillRect(0, 0, engine.size.x, engine.size.y);
@@ -113,7 +132,7 @@ window.Chem.onReady(function () {
     for (it.y = start.y; it.y < end.y; it.y += 1) {
       var row = grid[it.y];
       for (it.x = start.x; it.x < end.x; it.x += 1) {
-        context.fillStyle = row[it.x].color;
+        context.fillStyle = row[it.x].explored ? row[it.x].terrain.color : '#000000';
         var pos = toScreen(it);
         context.fillRect(pos.x, pos.y, size.x, size.y);
       }
@@ -133,7 +152,7 @@ window.Chem.onReady(function () {
     for (id in crew) {
       member = crew[id];
       if (!member.selected) continue;
-      context.fillStyle = '#000000';
+      context.fillStyle = '#ffffff';
       context.fillText(member.name,
           member.sprite.pos.x, member.sprite.pos.y - member.sprite.size.y - 5);
       context.fillStyle = '#009413';
@@ -143,23 +162,24 @@ window.Chem.onReady(function () {
 
     // mini map
     // border
-    context.fillStyle = '#000000';
+    context.fillStyle = '#ffffff';
     context.fillRect(miniMapPos.x - 2, miniMapPos.y - 2, gridSize.x + 4, gridSize.y + 4);
     for (var y = 0; y < gridSize.y; ++y) {
       for (var x = 0; x < gridSize.x; ++x) {
-        context.fillStyle = grid[y][x].color;
+        context.fillStyle = grid[y][x].explored ? grid[y][x].terrain.color : '#000000';
         context.fillRect(miniMapPos.x + x, miniMapPos.y + y, 1, 1);
       }
     }
     var miniMapTopLeft = fromScreen(v(0, 0));
     var miniMapBottomRight = fromScreen(engine.size);
     miniMapBoxSize = miniMapBottomRight.minus(miniMapTopLeft);
+    context.strokeStyle = '#ffffff';
     context.strokeRect(miniMapPos.x + miniMapTopLeft.x,
         miniMapPos.y + miniMapTopLeft.y,
         miniMapBoxSize.x, miniMapBoxSize.y);
 
     // draw a little fps counter in the corner
-    context.fillStyle = '#000000'
+    context.fillStyle = '#ffffff'
     engine.drawFps();
   });
   engine.start();
@@ -221,10 +241,10 @@ window.Chem.onReady(function () {
       var perlinRow = perlinNoise[y];
       for (var x = 0; x < gridWidth; ++x) {
         // just in case the weights don't add up to 1
-        gridRow[x] = landType.safe;
+        gridRow[x] = {terrain: landType.safe};
         for (var i = 0; i < terrainThresholds.length; ++i) {
           if (perlinRow[x] < terrainThresholds[i].threshold) {
-            gridRow[x] = terrainThresholds[i].terrain;
+            gridRow[x] = {terrain: terrainThresholds[i].terrain};
             break;
           }
         }
