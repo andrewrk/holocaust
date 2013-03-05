@@ -235,7 +235,8 @@ window.Chem.onReady(function () {
     for (it.y = start.y; it.y < end.y; it.y += 1) {
       var row = grid[it.y];
       for (it.x = start.x; it.x < end.x; it.x += 1) {
-        context.fillStyle = row[it.x].explored ? row[it.x].terrain.color : '#000000';
+        if (! row[it.x].explored) continue;
+        context.fillStyle = row[it.x].terrain.color;
         var pos = toScreen(it);
         context.fillRect(pos.x, pos.y, size.x, size.y);
       }
@@ -275,9 +276,12 @@ window.Chem.onReady(function () {
     // border
     context.fillStyle = '#ffffff';
     context.fillRect(miniMapPos.x - 2, miniMapPos.y - 2, gridSize.x + 4, gridSize.y + 4);
+    context.fillStyle = '#000000';
+    context.fillRect(miniMapPos.x, miniMapPos.y, gridSize.x, gridSize.y);
     for (var y = 0; y < gridSize.y; ++y) {
       for (var x = 0; x < gridSize.x; ++x) {
-        context.fillStyle = grid[y].explored ? grid[y][x].terrain.color : '#000000';
+        if (! grid[y][x].explored) continue;
+        context.fillStyle = grid[y][x].terrain.color;
         context.fillRect(miniMapPos.x + x, miniMapPos.y + y, 1, 1);
       }
     }
