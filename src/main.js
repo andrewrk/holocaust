@@ -100,7 +100,7 @@ window.Chem.onReady(function () {
       var loc = member.pos.floored();
       var terrain = grid[loc.y][loc.x].terrain;
       if (terrain === landType.danger) {
-        member.health -= 0.01 * dx;
+        member.health -= 0.005 * dx;
       } else if (terrain === landType.fatal) {
         member.health = 0;
       }
