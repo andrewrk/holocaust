@@ -14,6 +14,7 @@ window.Chem.onReady(function () {
   var gridSize = v(gridWidth, gridHeight);
   var crew = {};
   var crewLosRadius = 4;
+  var crewMaxSpeed = 0.1;
   var landType = {
     safe: {
       name: "Safe",
@@ -60,29 +61,12 @@ window.Chem.onReady(function () {
     if (button === Chem.Button.Mouse_Left) {
       if (inside(engine.mouse_pos, miniMapPos, gridSize)) return;
       onMapLeftClick();
+    } else if (button === Chem.Button.Mouse_Right) {
+      if (inside(engine.mouse_pos, miniMapPos, gridSize)) return;
+      onMapRightClick();
     }
   });
 
-  function inside(pos, start, size) {
-    var end = start.plus(size);
-    return pos.x >= start.x && pos.x < end.x &&
-      pos.y >= start.y && pos.y < end.y;
-  }
-
-  function onMapLeftClick() {
-    var pos = engine.mouse_pos;
-    for (var id in crew) {
-      var member = crew[id];
-      var sprite = member.sprite;
-      var selected = (
-        pos.x >= sprite.pos.x - sprite.size.x / 2 &&
-        pos.x <= sprite.pos.x + sprite.size.x / 2 &&
-        pos.y >= sprite.pos.y - sprite.size.y &&
-        pos.y <= sprite.pos.y);
-      var shift = engine.buttonState(Chem.Button.Key_Shift) || engine.buttonState(Chem.Button.Key_Ctrl);
-      member.selected = (shift ? member.selected : false) || selected;
-    }
-  }
 
   engine.on('update', function (dt, dx) {
     if (engine.buttonState(Chem.Button.Key_Left)) {
@@ -100,12 +84,13 @@ window.Chem.onReady(function () {
     }
     scroll.floor();
 
-    // explore areas around crew members
     for (var id in crew) {
       var member = crew[id];
+
+      // explore areas around crew members
       for (var y = -crewLosRadius; y < crewLosRadius; ++y) {
         for (var x = -crewLosRadius; x < crewLosRadius; ++x) {
-          var targetPos = member.pos.offset(x, y);
+          var targetPos = member.pos.offset(x, y).floor();
           if (targetPos.distanceTo(member.pos) <= crewLosRadius) {
             if (!grid[targetPos.y][targetPos.x].explored) {
               explore(member, targetPos);
@@ -113,11 +98,25 @@ window.Chem.onReady(function () {
           }
         }
       }
+
+      // crew member physics
+      var vel = member.inputs.direction.scaled(member.inputs.speed * dx);
+      member.pos.add(vel);
+
+      // crew member AI
+      if (member.task && member.task.name === 'walk') {
+        var dest = member.task.pos;
+        if (dest.distanceTo(member.pos) < crewMaxSpeed) {
+          member.pos = dest;
+          member.inputs.speed = 0;
+          member.task = null;
+        } else {
+          member.inputs.direction = dest.minus(member.pos).normalize();
+          member.inputs.speed = crewMaxSpeed;
+        }
+      }
     }
   });
-  function explore(crewMember, pos) {
-    grid[pos.y][pos.x].explored = true;
-  }
   engine.on('draw', function (context) {
     context.fillStyle = '#000000'
     context.fillRect(0, 0, engine.size.x, engine.size.y);
@@ -185,6 +184,45 @@ window.Chem.onReady(function () {
   engine.start();
   canvas.focus();
 
+  function inside(pos, start, size) {
+    var end = start.plus(size);
+    return pos.x >= start.x && pos.x < end.x &&
+      pos.y >= start.y && pos.y < end.y;
+  }
+
+  function onMapRightClick() {
+    var pos = fromScreen(engine.mouse_pos);
+    for (var id in crew) {
+      var member = crew[id];
+      if (member.selected) {
+        member.task = {
+          name: 'walk',
+          pos: pos.clone(),
+          state: 'off',
+        };
+      }
+    }
+  }
+
+  function onMapLeftClick() {
+    var pos = engine.mouse_pos;
+    for (var id in crew) {
+      var member = crew[id];
+      var sprite = member.sprite;
+      var selected = (
+        pos.x >= sprite.pos.x - sprite.size.x / 2 &&
+        pos.x <= sprite.pos.x + sprite.size.x / 2 &&
+        pos.y >= sprite.pos.y - sprite.size.y &&
+        pos.y <= sprite.pos.y);
+      var shift = engine.buttonState(Chem.Button.Key_Shift) || engine.buttonState(Chem.Button.Key_Ctrl);
+      member.selected = (shift ? member.selected : false) || selected;
+    }
+  }
+
+  function explore(crewMember, pos) {
+    grid[pos.y][pos.x].explored = true;
+  }
+
   function toScreen(vec) {
     return v(vec.x * cellSize.x * zoom.x - scroll.x,
         vec.y * cellSize.y * zoom.y - scroll.y);
@@ -206,6 +244,10 @@ window.Chem.onReady(function () {
       name: name,
       health: 1,
       pos: pos.clone(),
+      inputs: {
+        direction: v(1, 0),
+        speed: 0,
+      },
       sprite: new Chem.Sprite(graphic, {
         batch: batch,
         pos: pos.times(cellSize),
