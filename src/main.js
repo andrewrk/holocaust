@@ -76,6 +76,11 @@ window.Chem.onReady(function () {
     } else if (button === Chem.Button.Mouse_Right) {
       if (inside(engine.mouse_pos, miniMapPos, gridSize)) return;
       onMapRightClick();
+    } else if (engine.buttonState(Chem.Button.Mouse_Left)) {
+      // cheatz!!
+      if (button === Chem.Button.Key_E) {
+        setEverythingExplored();
+      }
     }
   });
 
@@ -354,6 +359,13 @@ window.Chem.onReady(function () {
   engine.start();
   canvas.focus();
 
+  function setEverythingExplored() {
+    for (var y = 0; y < gridSize.y; ++y) {
+      for (var x = 0; x < gridSize.x; ++x) {
+        grid[y][x].explored = true;
+      }
+    }
+  }
   function inside(pos, start, size) {
     var end = start.plus(size);
     return pos.x >= start.x && pos.x < end.x &&
