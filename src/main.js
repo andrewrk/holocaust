@@ -56,23 +56,13 @@ window.Chem.onReady(function () {
   };
   var grid = gridFromPerlinNoise();
 
-  var startSize = v(4, 4);
-  var startPos = v(gridWidth / 2, gridHeight / 2).floor();
   var zoom = v(3, 3);
   var scroll = engine.size.clone();
   var miniMapPos = engine.size.minus(gridSize).offset(-2, -2);
   var miniMapBoxSize = v();
 
-  // make a safe area to start out on
-  for (var y = startPos.y - startSize.y; y < startPos.y + startSize.y; ++y) {
-    for (var x = startPos.x - startSize.x; x < startPos.x + startSize.x; ++x) {
-      grid[y][x].terrain = landType.safe;
-    }
-  }
-  createCrewMember("Dean", "man", startPos.offset(-2, 0));
-  createCrewMember("Hank", "man", startPos.offset(2, 0));
-  createCrewMember("Gaby", "lady", startPos.offset(0, -2));
-  createCrewMember("Andy", "man", startPos.offset(0, 2));
+  createSafeStartArea();
+
 
   engine.on('buttondown', function(button) {
     if (button === Chem.Button.Mouse_Left) {
@@ -440,7 +430,7 @@ window.Chem.onReady(function () {
       graphic: graphic,
       name: name,
       health: 1,
-      pos: pos.clone(),
+      pos: pos.offset(0.5, 0.5),
       inputs: {
         direction: v(1, 0),
         speed: 0,
@@ -607,6 +597,27 @@ window.Chem.onReady(function () {
       arr[y] = new Array(w);
     }
     return arr;
+  }
+
+  function createSafeStartArea() {
+    // make a safe area to start out on
+    var startSize = v(4, 4);
+    var startPos = v(gridWidth / 2, gridHeight / 2).floor();
+    var x, y;
+    for (y = startPos.y - startSize.y; y < startPos.y + startSize.y; ++y) {
+      for (x = startPos.x - startSize.x; x < startPos.x + startSize.x; ++x) {
+        grid[y][x].terrain = landType.safe;
+      }
+    }
+    for (y = startPos.y - 1; y < startPos.y + 1; ++y) {
+      for (x = startPos.x - 1; x < startPos.x + 1; ++x) {
+        grid[y][x].terrain = landType.treeAdult;
+      }
+    }
+    createCrewMember("Dean", "man", startPos.offset(-2, 0));
+    createCrewMember("Hank", "man", startPos.offset(2, 0));
+    createCrewMember("Gaby", "lady", startPos.offset(0, -2));
+    createCrewMember("Andy", "man", startPos.offset(0, 2));
   }
 });
 
