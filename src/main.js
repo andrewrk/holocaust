@@ -38,6 +38,10 @@ window.Chem.onReady(function () {
       name: "Contaminated Water",
       color: '#6D2A49',
     },
+    fatalWater: {
+      name: "Fatal Water",
+      color: '#350024',
+    },
   };
   var grid = gridFromPerlinNoise();
 
@@ -266,7 +270,7 @@ window.Chem.onReady(function () {
     context.fillRect(miniMapPos.x - 2, miniMapPos.y - 2, gridSize.x + 4, gridSize.y + 4);
     for (var y = 0; y < gridSize.y; ++y) {
       for (var x = 0; x < gridSize.x; ++x) {
-        context.fillStyle = grid[y][x].explored ? grid[y][x].terrain.color : '#000000';
+        context.fillStyle = grid[y].explored ? grid[y][x].terrain.color : '#000000';
         context.fillRect(miniMapPos.x + x, miniMapPos.y + y, 1, 1);
       }
     }
@@ -389,10 +393,11 @@ window.Chem.onReady(function () {
       item.threshold = sum;
     });
     var grid = createArray(gridWidth, gridHeight);
+    var x;
     for (var y = 0; y < gridHeight; ++y) {
       var gridRow = grid[y];
       var perlinRow = perlinNoise[y];
-      for (var x = 0; x < gridWidth; ++x) {
+      for (x = 0; x < gridWidth; ++x) {
         // just in case the weights don't add up to 1
         gridRow[x] = {terrain: landType.safe};
         for (var i = 0; i < terrainThresholds.length; ++i) {
@@ -403,7 +408,41 @@ window.Chem.onReady(function () {
         }
       }
     }
+    // add rivers
+    var waterCount = 0;
+    while (waterCount < 1000) {
+      waterCount += addRiver();
+    }
+    function addRiver() {
+      var count = 0;
+      var it = v(Math.random() * gridSize.x, 0).floor();
+      var itRadius = Math.floor(Math.random() * 5) + 2;
+      while(it.y < gridHeight) {
+        if (itRadius < 1) itRadius = 1;
+        if (itRadius > 10) itRadius = 10;
+        for (x = it.x - itRadius; x < it.x + itRadius; ++x) {
+          if (x < 0 || x >= gridWidth) continue;
+          grid[it.y][x].terrain = waterizeTerrain(grid[it.y][x].terrain);
+          count += 1;
+        }
+        it.y += 1;
+        it.x += Math.floor(Math.random() * 3) - 1;
+        itRadius += Math.floor(Math.random() * 3) - 1;
+      }
+      return count;
+    }
     return grid;
+  }
+  function waterizeTerrain(terrain) {
+    if (terrain === landType.safe) {
+      return landType.cleanWater;
+    } else if (terrain === landType.danger) {
+      return landType.contaminatedWater;
+    } else if (terrain === landType.fatal) {
+      return landType.fatalWater;
+    } else {
+      return terrain;
+    }
   }
   function generatePerlinNoise(width, height, options) {
     options = options || {};
