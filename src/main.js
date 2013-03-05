@@ -11,7 +11,9 @@ window.Chem.onReady(function () {
   var cellSize = v(6, 6);
   var gridWidth = Math.floor(canvas.width / cellSize.x);
   var gridHeight = Math.floor(canvas.height / cellSize.y);
+  var gridSize = v(gridWidth, gridHeight);
   var crew = {};
+  var crewLosRadius = 3;
   var landType = {
     safe: {
       name: "Safe",
@@ -121,6 +123,24 @@ window.Chem.onReady(function () {
       context.fillRect(member.sprite.pos.x - healthBarSize.x / 2,
           member.sprite.pos.y - member.sprite.size.y - healthBarSize.y / 2, healthBarSize.x, healthBarSize.y);
     }
+
+    // mini map
+    var miniMapPos = engine.size.minus(gridSize).offset(-2, -2);
+    // border
+    context.fillStyle = '#000000';
+    context.fillRect(miniMapPos.x - 2, miniMapPos.y - 2, gridSize.x + 4, gridSize.y + 4);
+    for (var y = 0; y < gridSize.y; ++y) {
+      for (var x = 0; x < gridSize.x; ++x) {
+        context.fillStyle = grid[y][x].color;
+        context.fillRect(miniMapPos.x + x, miniMapPos.y + y, 1, 1);
+      }
+    }
+    var miniMapTopLeft = fromScreen(v(0, 0));
+    var miniMapBottomRight = fromScreen(engine.size);
+    var miniMapBoxSize = miniMapBottomRight.minus(miniMapTopLeft);
+    context.strokeRect(miniMapPos.x + miniMapTopLeft.x,
+        miniMapPos.y + miniMapTopLeft.y,
+        miniMapBoxSize.x, miniMapBoxSize.y);
 
     // draw a little fps counter in the corner
     context.fillStyle = '#000000'
