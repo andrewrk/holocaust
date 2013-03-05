@@ -144,6 +144,7 @@ window.Chem.onReady(function () {
       // crew member AI
       if (member.task && member.task.name === 'walk') {
         if (member.task.state === 'off') {
+          member.task.state = 'path';
           // compute path
           var results = aStar({
             start: member.pos.floored(),
@@ -153,12 +154,24 @@ window.Chem.onReady(function () {
             heuristic: createHeuristicFn(member),
             timeout: 50,
           });
-          member.task.state = 'path';
           if (results.path.length === 1) {
-            // A* can't get you there, go straight there
-            member.task.path = [member.task.pos];
+            // compute unsafe path
+            results = aStar({
+              start: member.pos.floored(),
+              isEnd: createIsEnd(member),
+              neighbor: unsafeNeighborFn,
+              distance: distanceFn,
+              heuristic: createUnsafeHeuristicFn(member),
+              timeout: 50,
+            });
+            if (results.path.length === 1) {
+              // as a last ditch effort, make a beeline for dest
+              member.task.path = [member.task.pos];
+            } else {
+              member.task.path = results.path.slice(1);
+            }
           } else {
-            member.task.path = results.path;
+            member.task.path = results.path.slice(1);
           }
         }
         if (member.task.state === 'path') {
@@ -185,6 +198,13 @@ window.Chem.onReady(function () {
         }
       }
     }
+    function createUnsafeHeuristicFn(member) {
+      return function (node) {
+        var terrainAtNode = grid[node.y][node.x].terrain;
+        var unsafePenalty = (terrainAtNode === landType.danger) ? 100 : 0;
+        return node.distanceTo(member.task.pos) + unsafePenalty;
+      };
+    }
     function createHeuristicFn(member) {
       return function (node) {
         return node.distanceTo(member.task.pos);
@@ -192,6 +212,35 @@ window.Chem.onReady(function () {
     }
     function distanceFn(a, b) {
       return a.distanceTo(b);
+    }
+    function unsafeNeighborFn(node) {
+      var cells = [];
+      var leftSafe = addIfSafe(v(-1, 0));
+      var rightSafe = addIfSafe(v(1, 0));
+      var topSafe = addIfSafe(v(0, -1));
+      var bottomSafe = addIfSafe(v(0, 1));
+      // add the corners if safe
+      if (leftSafe && topSafe) addIfSafe(v(-1, -1));
+      if (rightSafe && topSafe) addIfSafe(v(1, -1));
+      if (leftSafe && bottomSafe) addIfSafe(v(-1, 1));
+      if (rightSafe && bottomSafe) addIfSafe(v(1, 1));
+      return cells;
+
+      function addIfSafe(vec) {
+        var pt = node.plus(vec);
+        if (pt.x >= gridSize.x || pt.x < 0 ||
+            pt.y >= gridSize.y || pt.y < 0)
+        {
+          return false;
+        }
+        var terrain = grid[pt.y][pt.x].terrain;
+        var entity = filledAreas[pt];
+        if (!terrain.walkable || entity || terrain === landType.fatal) {
+          return false;
+        }
+        cells.push(pt);
+        return true;
+      }
     }
     function neighborFn(node) {
       var cells = [];
@@ -208,11 +257,16 @@ window.Chem.onReady(function () {
 
       function addIfSafe(vec) {
         var pt = node.plus(vec);
+        if (pt.x >= gridSize.x || pt.x < 0 ||
+            pt.y >= gridSize.y || pt.y < 0)
+        {
+          return false;
+        }
         var terrain = grid[pt.y][pt.x].terrain;
         var entity = filledAreas[pt];
-        var safe = terrain === landType.safe && !entity;
-        if (safe) cells.push(pt);
-        return safe;
+        if (terrain !== landType.safe || entity) return false;
+        cells.push(pt);
+        return true;
       }
     }
     function createIsEnd(member) {
