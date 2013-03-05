@@ -42,6 +42,8 @@ window.Chem.onReady(function () {
   var startPos = v(gridWidth / 2, gridHeight / 2).floor();
   var zoom = v(3, 3);
   var scroll = engine.size.clone();
+  var miniMapPos = engine.size.minus(gridSize).offset(-2, -2);
+  var miniMapBoxSize = v();
 
   for (var y = startPos.y - startSize.y; y < startPos.y + startSize.y; ++y) {
     for (var x = startPos.x - startSize.x; x < startPos.x + startSize.x; ++x) {
@@ -54,21 +56,32 @@ window.Chem.onReady(function () {
   createCrewMember("Andy", "man", startPos.offset(0, 2));
 
   engine.on('buttondown', function(button) {
-    var pos = engine.mouse_pos;
     if (button === Chem.Button.Mouse_Left) {
-      for (var id in crew) {
-        var member = crew[id];
-        var sprite = member.sprite;
-        var selected = (
-          pos.x >= sprite.pos.x - sprite.size.x / 2 &&
-          pos.x <= sprite.pos.x + sprite.size.x / 2 &&
-          pos.y >= sprite.pos.y - sprite.size.y &&
-          pos.y <= sprite.pos.y);
-        var shift = engine.buttonState(Chem.Button.Key_Shift) || engine.buttonState(Chem.Button.Key_Ctrl);
-        member.selected = (shift ? member.selected : false) || selected;
-      }
+      if (inside(engine.mouse_pos, miniMapPos, gridSize)) return;
+      onMapLeftClick();
     }
   });
+
+  function inside(pos, start, size) {
+    var end = start.plus(size);
+    return pos.x >= start.x && pos.x < end.x &&
+      pos.y >= start.y && pos.y < end.y;
+  }
+
+  function onMapLeftClick() {
+    var pos = engine.mouse_pos;
+    for (var id in crew) {
+      var member = crew[id];
+      var sprite = member.sprite;
+      var selected = (
+        pos.x >= sprite.pos.x - sprite.size.x / 2 &&
+        pos.x <= sprite.pos.x + sprite.size.x / 2 &&
+        pos.y >= sprite.pos.y - sprite.size.y &&
+        pos.y <= sprite.pos.y);
+      var shift = engine.buttonState(Chem.Button.Key_Shift) || engine.buttonState(Chem.Button.Key_Ctrl);
+      member.selected = (shift ? member.selected : false) || selected;
+    }
+  }
 
   engine.on('update', function (dt, dx) {
     if (engine.buttonState(Chem.Button.Key_Left)) {
@@ -80,6 +93,9 @@ window.Chem.onReady(function () {
       scroll.y -= 10 * dx;
     } else if (engine.buttonState(Chem.Button.Key_Down)) {
       scroll.y += 10 * dx;
+    }
+    if (engine.buttonState(Chem.Button.Mouse_Left) && inside(engine.mouse_pos, miniMapPos, gridSize)) {
+      scroll = engine.mouse_pos.minus(miniMapPos).minus(miniMapBoxSize.scaled(0.5)).times(cellSize).times(zoom);
     }
     scroll.floor();
   });
@@ -126,7 +142,6 @@ window.Chem.onReady(function () {
     }
 
     // mini map
-    var miniMapPos = engine.size.minus(gridSize).offset(-2, -2);
     // border
     context.fillStyle = '#000000';
     context.fillRect(miniMapPos.x - 2, miniMapPos.y - 2, gridSize.x + 4, gridSize.y + 4);
@@ -138,7 +153,7 @@ window.Chem.onReady(function () {
     }
     var miniMapTopLeft = fromScreen(v(0, 0));
     var miniMapBottomRight = fromScreen(engine.size);
-    var miniMapBoxSize = miniMapBottomRight.minus(miniMapTopLeft);
+    miniMapBoxSize = miniMapBottomRight.minus(miniMapTopLeft);
     context.strokeRect(miniMapPos.x + miniMapTopLeft.x,
         miniMapPos.y + miniMapTopLeft.y,
         miniMapBoxSize.x, miniMapBoxSize.y);
