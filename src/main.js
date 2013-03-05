@@ -96,10 +96,23 @@ window.Chem.onReady(function () {
     for (id in crew) {
       member = crew[id];
 
+      // get hurt by dangerous land
+      var loc = member.pos.floored();
+      var terrain = grid[loc.y][loc.x].terrain;
+      if (terrain === landType.danger) {
+        member.health -= 0.01 * dx;
+      } else if (terrain === landType.fatal) {
+        member.health = 0;
+      }
+      if (member.health <= 0) {
+        die(member);
+        return;
+      }
+
       // explore areas around crew members
       for (var y = -crewLosRadius; y < crewLosRadius; ++y) {
         for (var x = -crewLosRadius; x < crewLosRadius; ++x) {
-          var targetPos = member.pos.offset(x, y).floor();
+          var targetPos = loc.offset(x, y);
           if (targetPos.distanceTo(member.pos) <= crewLosRadius) {
             if (!grid[targetPos.y][targetPos.x].explored) {
               explore(member, targetPos);
@@ -234,9 +247,11 @@ window.Chem.onReady(function () {
       context.fillStyle = '#ffffff';
       context.fillText(member.name,
           member.sprite.pos.x, member.sprite.pos.y - member.sprite.size.y - 5);
+      start = member.sprite.pos.minus(healthBarSize.scaled(0.5)).floor();
+      context.fillStyle = '#000000';
+      context.fillRect(start.x - 1, start.y - member.sprite.size.y - 1, healthBarSize.x + 2, healthBarSize.y + 2);
       context.fillStyle = '#009413';
-      context.fillRect(member.sprite.pos.x - healthBarSize.x / 2,
-          member.sprite.pos.y - member.sprite.size.y - healthBarSize.y / 2, healthBarSize.x, healthBarSize.y);
+      context.fillRect(start.x, start.y - member.sprite.size.y, healthBarSize.x * member.health, healthBarSize.y);
     }
 
     // highlight the square you're mouse overing
@@ -309,6 +324,15 @@ window.Chem.onReady(function () {
     grid[pos.y][pos.x].explored = true;
   }
 
+  function die(crewMember) {
+    crewMember.sprite.setAnimationName(crewMember.graphic + 'die');
+    crewMember.sprite.setFrameIndex(0);
+    crewMember.sprite.on('animation_end', function() {
+      crewMember.sprite.delete();
+    });
+    delete crew[crewMember.id];
+  }
+
   function toScreen(vec) {
     return v(vec.x * cellSize.x * zoom.x - scroll.x,
         vec.y * cellSize.y * zoom.y - scroll.y);
@@ -327,6 +351,7 @@ window.Chem.onReady(function () {
     var id = "" + Math.random();
     crew[id] = {
       id: id,
+      graphic: graphic,
       name: name,
       health: 1,
       pos: pos.clone(),

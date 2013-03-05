@@ -17,9 +17,19 @@ exports.spritesheet = {
   animations: {
     lady: {
       anchor: 'bottom',
+      frames: 'lady00.png',
     },
     man: {
       anchor: 'bottom',
+      frames: 'man00.png',
+    },
+    ladydie: {
+      anchor: 'bottom',
+      frames: 'lady',
+    },
+    mandie: {
+      anchor: 'bottom',
+      frames: 'man',
     },
   }
 };
