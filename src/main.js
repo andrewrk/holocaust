@@ -130,17 +130,29 @@ window.Chem.onReady(function () {
             timeout: 50,
           });
           member.task.state = 'path';
-          member.task.path = results.path;
+          if (results.path.length === 1) {
+            // A* can't get you there, go straight there
+            member.task.path = [member.task.pos];
+          } else {
+            member.task.path = results.path;
+          }
         }
         if (member.task.state === 'path') {
           var nextNode = member.task.path[0].offset(0.5, 0.5);
           if (nextNode.distanceTo(member.pos) < crewMaxSpeed) {
             member.task.path.shift();
             if (member.task.path.length === 0) {
-              // arrived
+              // done following path
               member.pos = nextNode;
-              member.task = null;
-              member.inputs.speed = 0;
+              if (member.pos.floored().equals(member.task.pos.floored())) {
+                // task complete
+                member.task = null;
+                member.inputs.speed = 0;
+              } else {
+                // recompute path
+                member.task.state = 'off';
+                member.inputs.speed = 0;
+              }
             }
           } else {
             member.inputs.direction = nextNode.minus(member.pos).normalize();
