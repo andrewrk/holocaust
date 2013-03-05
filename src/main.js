@@ -18,6 +18,11 @@ window.Chem.onReady(function () {
   var crewLosRadius = 4;
   var crewMaxSpeed = 0.1;
   var landType = {
+    treeAdult: {
+      name: "Adult Tree",
+      color: '#002702',
+      walkable: false,
+    },
     safe: {
       name: "Safe",
       color: '#48C13C',
@@ -459,7 +464,11 @@ window.Chem.onReady(function () {
       },
       {
         terrain: landType.safe,
-        weight: 0.30,
+        weight: 0.15,
+      },
+      {
+        terrain: landType.treeAdult,
+        weight: 0.15,
       },
     ];
 
