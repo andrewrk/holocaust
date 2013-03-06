@@ -54,6 +54,7 @@ window.Chem.onReady(function () {
       walkable: false,
     },
   };
+
   var grid = gridFromPerlinNoise();
 
   var zoom = v(3, 3);
@@ -62,6 +63,7 @@ window.Chem.onReady(function () {
   var miniMapBoxSize = v();
 
   createSafeStartArea();
+  generateTerrainTextures();
 
 
   engine.on('buttondown', function(button) {
@@ -192,8 +194,9 @@ window.Chem.onReady(function () {
       var row = grid[it.y];
       for (it.x = start.x; it.x < end.x; it.x += 1) {
         if (! row[it.x].explored) continue;
-        context.fillStyle = row[it.x].terrain.color;
         var pos = toScreen(it);
+        var cell = row[it.x];
+        context.fillStyle = cell.terrain.color;
         context.fillRect(pos.x, pos.y, size.x, size.y);
       }
     }
@@ -237,8 +240,7 @@ window.Chem.onReady(function () {
     for (var y = 0; y < gridSize.y; ++y) {
       for (var x = 0; x < gridSize.x; ++x) {
         if (! grid[y][x].explored) continue;
-        context.fillStyle = grid[y][x].terrain.color;
-        context.fillRect(miniMapPos.x + x, miniMapPos.y + y, 1, 1);
+        context.putImageData(grid[y][x].terrain.pixel, miniMapPos.x + x, miniMapPos.y + y);
       }
     }
     var miniMapTopLeft = fromScreen(v(0, 0));
@@ -640,6 +642,29 @@ window.Chem.onReady(function () {
     createCrewMember("Hank", "man", startPos.offset(2, 0));
     createCrewMember("Gaby", "lady", startPos.offset(0, -2));
     createCrewMember("Andy", "man", startPos.offset(0, 2));
+  }
+
+  function generateTerrainTextures() {
+    for (var id in landType) {
+      var terrain = landType[id];
+      terrain.pixel = engine.context.createImageData(1, 1);
+      var d = terrain.pixel.data;
+      var colorParts = extractRgba(terrain.color);
+      d[0] = colorParts.red;
+      d[1] = colorParts.green;
+      d[2] = colorParts.blue;
+      d[3] = colorParts.alpha || 255;
+    }
+  }
+
+  function extractRgba(str) {
+    str = str.replace(/^#/, '');
+    return {
+      red: parseInt(str.substring(0, 2), 16),
+      green: parseInt(str.substring(2, 4), 16),
+      blue: parseInt(str.substring(4, 6), 16),
+      alpha: parseInt(str.substring(6, 8), 16),
+    };
   }
 });
 
