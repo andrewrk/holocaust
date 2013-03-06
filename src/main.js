@@ -61,12 +61,21 @@ window.Chem.onReady(function () {
   var scroll = engine.size.clone();
   var miniMapPos = engine.size.minus(gridSize).offset(-2, -2);
   var miniMapBoxSize = v();
+  var miniMapImage;
+  var updateMiniMapTimer = null;
 
   createSafeStartArea();
   generateTerrainTextures();
+  generateMiniMap();
 
+  engine.on('buttondown', onButtonDown);
+  engine.on('update', onUpdate);
+  engine.on('draw', onDraw);
 
-  engine.on('buttondown', function(button) {
+  engine.start();
+  canvas.focus();
+
+  function onButtonDown(button) {
     if (button === Chem.Button.Mouse_Left) {
       if (inside(engine.mouse_pos, miniMapPos, gridSize)) return;
       onMapLeftClick();
@@ -79,10 +88,9 @@ window.Chem.onReady(function () {
         setEverythingExplored();
       }
     }
-  });
+  }
 
-
-  engine.on('update', function (dt, dx) {
+  function onUpdate(dt, dx) {
     if (engine.buttonState(Chem.Button.Key_Left)) {
       scroll.x -= 10 * dx;
     } else if (engine.buttonState(Chem.Button.Key_Right)) {
@@ -178,8 +186,9 @@ window.Chem.onReady(function () {
         }
       }
     }
-  });
-  engine.on('draw', function (context) {
+  }
+
+  function onDraw(context) {
     context.fillStyle = '#000000'
     context.fillRect(0, 0, engine.size.x, engine.size.y);
     var start = fromScreen(v(0, 0)).floor();
@@ -232,17 +241,7 @@ window.Chem.onReady(function () {
     context.strokeRect(mouseCellPos.x, mouseCellPos.y, mouseCellSize.x, mouseCellSize.y);
 
     // mini map
-    // border
-    context.fillStyle = '#ffffff';
-    context.fillRect(miniMapPos.x - 2, miniMapPos.y - 2, gridSize.x + 4, gridSize.y + 4);
-    context.fillStyle = '#000000';
-    context.fillRect(miniMapPos.x, miniMapPos.y, gridSize.x, gridSize.y);
-    for (var y = 0; y < gridSize.y; ++y) {
-      for (var x = 0; x < gridSize.x; ++x) {
-        if (! grid[y][x].explored) continue;
-        context.putImageData(grid[y][x].terrain.pixel, miniMapPos.x + x, miniMapPos.y + y);
-      }
-    }
+    context.drawImage(miniMapImage, miniMapPos.x, miniMapPos.y);
     var miniMapTopLeft = fromScreen(v(0, 0));
     var miniMapBottomRight = fromScreen(engine.size);
     miniMapBoxSize = miniMapBottomRight.minus(miniMapTopLeft);
@@ -254,9 +253,7 @@ window.Chem.onReady(function () {
     // draw a little fps counter in the corner
     context.fillStyle = '#ffffff'
     engine.drawFps();
-  });
-  engine.start();
-  canvas.focus();
+  }
 
   function setEverythingExplored() {
     for (var y = 0; y < gridSize.y; ++y) {
@@ -264,6 +261,7 @@ window.Chem.onReady(function () {
         grid[y][x].explored = true;
       }
     }
+    generateMiniMap();
   }
   function inside(pos, start, size) {
     var end = start.plus(size);
@@ -312,6 +310,8 @@ window.Chem.onReady(function () {
 
   function explore(crewMember, pos) {
     grid[pos.y][pos.x].explored = true;
+    clearTimeout(updateMiniMapTimer);
+    updateMiniMapTimer = setTimeout(generateMiniMap, 0);
   }
 
   function die(crewMember) {
@@ -655,6 +655,27 @@ window.Chem.onReady(function () {
       d[2] = colorParts.blue;
       d[3] = colorParts.alpha || 255;
     }
+  }
+
+  function generateMiniMap() {
+    var buffer = document.createElement('canvas');
+    buffer.width = gridSize.x + 4;
+    buffer.height = gridSize.y + 4;
+    var context = buffer.getContext('2d');
+    // border
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, buffer.width, buffer.height);
+    // start with black
+    context.fillStyle = '#000000';
+    context.fillRect(2, 2, gridSize.x, gridSize.y);
+    for (var y = 0; y < gridSize.y; ++y) {
+      for (var x = 0; x < gridSize.x; ++x) {
+        if (! grid[y][x].explored) continue;
+        context.fillStyle = grid[y][x].terrain.color;
+        context.fillRect(2 + x, 2 + y, 1, 1);
+      }
+    }
+    miniMapImage = buffer;
   }
 
   function extractRgba(str) {
