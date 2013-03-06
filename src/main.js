@@ -197,8 +197,19 @@ window.Chem.onReady(function () {
       var chopCell = grid[member.task.pos.y][member.task.pos.x];
       if (chopCell.terrain !== landType.treeAdult) {
         // mission accomplished
-        member.task = null;
-        member.inputs.chop = null;
+        // look for close by tree
+        var nextPos = findClosest(member.task.pos, crewLosRadius, function(cell) {
+          return cell.terrain === landType.treeAdult;
+        });
+        if (nextPos) {
+          // chop next tree
+          member.task.pos = nextPos;
+          member.task.state = 'off';
+        } else {
+          // no more trees seen
+          member.task = null;
+          member.inputs.chop = null;
+        }
       }
     } else if (member.task.state === 'path') {
       var nextNode = member.task.path[0].offset(0.5, 0.5);
@@ -600,8 +611,8 @@ window.Chem.onReady(function () {
     var results = aStar({
       start: member.pos.floored(),
       isEnd: createIsEnd(),
-      neighbor: neighborFn,
-      distance: distanceFn,
+      neighbor: createNeighborFn(),
+      distance: pointDistance,
       heuristic: createHeuristicFn(member),
       timeout: 50,
     });
@@ -610,8 +621,8 @@ window.Chem.onReady(function () {
       results = aStar({
         start: member.pos.floored(),
         isEnd: createIsEnd(),
-        neighbor: unsafeNeighborFn,
-        distance: distanceFn,
+        neighbor: createNeighborFn({unsafe: true}),
+        distance: pointDistance,
         heuristic: createUnsafeHeuristicFn(member),
         timeout: 50,
       });
@@ -635,64 +646,6 @@ window.Chem.onReady(function () {
       return function (node) {
         return node.distanceTo(member.task.pos);
       };
-    }
-    function distanceFn(a, b) {
-      return a.distanceTo(b);
-    }
-    function unsafeNeighborFn(node) {
-      var cells = [];
-      var leftSafe = addIfSafe(v(-1, 0));
-      var rightSafe = addIfSafe(v(1, 0));
-      var topSafe = addIfSafe(v(0, -1));
-      var bottomSafe = addIfSafe(v(0, 1));
-      // add the corners if safe
-      if (leftSafe && topSafe) addIfSafe(v(-1, -1));
-      if (rightSafe && topSafe) addIfSafe(v(1, -1));
-      if (leftSafe && bottomSafe) addIfSafe(v(-1, 1));
-      if (rightSafe && bottomSafe) addIfSafe(v(1, 1));
-      return cells;
-
-      function addIfSafe(vec) {
-        var pt = node.plus(vec);
-        if (pt.x >= gridSize.x || pt.x < 0 ||
-            pt.y >= gridSize.y || pt.y < 0)
-        {
-          return false;
-        }
-        var cell = grid[pt.y][pt.x];
-        var terrain = cell.terrain;
-        if (!terrain.walkable || cell.entity || terrain === landType.fatal) {
-          return false;
-        }
-        cells.push(pt);
-        return true;
-      }
-    }
-    function neighborFn(node) {
-      var cells = [];
-      var leftSafe = addIfSafe(v(-1, 0));
-      var rightSafe = addIfSafe(v(1, 0));
-      var topSafe = addIfSafe(v(0, -1));
-      var bottomSafe = addIfSafe(v(0, 1));
-      // add the corners if safe
-      if (leftSafe && topSafe) addIfSafe(v(-1, -1));
-      if (rightSafe && topSafe) addIfSafe(v(1, -1));
-      if (leftSafe && bottomSafe) addIfSafe(v(-1, 1));
-      if (rightSafe && bottomSafe) addIfSafe(v(1, 1));
-      return cells;
-
-      function addIfSafe(vec) {
-        var pt = node.plus(vec);
-        if (pt.x >= gridSize.x || pt.x < 0 ||
-            pt.y >= gridSize.y || pt.y < 0)
-        {
-          return false;
-        }
-        var cell = grid[pt.y][pt.x];
-        if (cell.terrain !== landType.safe || cell.entity) return false;
-        cells.push(pt);
-        return true;
-      }
     }
     function createIsEnd() {
       var end = dest.floored();
@@ -765,6 +718,71 @@ window.Chem.onReady(function () {
       blue: parseInt(str.substring(4, 6), 16),
       alpha: parseInt(str.substring(6, 8), 16),
     };
+  }
+
+  function findClosest(start, radius, matchFn) {
+    var results = aStar({
+      start: start,
+      isEnd: function(node) {
+        var cell = grid[node.y][node.x];
+        return matchFn(cell);
+      },
+      neighbor: createNeighborFn({
+        start: start,
+        maxDistance: crewLosRadius,
+        extraWalkableCells: matchFn,
+      }),
+      distance: pointDistance,
+      heuristic: function(node) {
+        return 0; // no heuristic
+      },
+    });
+    return results.status === 'success' ? results.path.pop() : null;
+  }
+  function createNeighborFn(options) {
+    options = options || {};
+    var start = options.start;
+    var maxDistance = options.maxDistance;
+    var unsafe = !!options.unsafe;
+    var extraWalkableCells = options.extraWalkableCells;
+    return function (node) {
+      var cells = [];
+      var leftSafe = addIfSafe(v(-1, 0));
+      var rightSafe = addIfSafe(v(1, 0));
+      var topSafe = addIfSafe(v(0, -1));
+      var bottomSafe = addIfSafe(v(0, 1));
+      // add the corners if safe
+      if (leftSafe && topSafe) addIfSafe(v(-1, -1));
+      if (rightSafe && topSafe) addIfSafe(v(1, -1));
+      if (leftSafe && bottomSafe) addIfSafe(v(-1, 1));
+      if (rightSafe && bottomSafe) addIfSafe(v(1, 1));
+      return cells;
+
+      function addIfSafe(vec) {
+        var pt = node.plus(vec);
+        if (pt.x >= gridSize.x || pt.x < 0 ||
+            pt.y >= gridSize.y || pt.y < 0)
+        {
+          return false;
+        }
+        if (maxDistance != null && pt.distanceTo(start) > maxDistance) {
+          return false;
+        }
+        var cell = grid[pt.y][pt.x];
+        var terrain = cell.terrain;
+        if (cell.entity ||
+            (unsafe && (!terrain.walkable || terrain === landType.fatal)) ||
+            (!unsafe && (terrain !== landType.safe && (!extraWalkableCells || !extraWalkableCells(cell)))))
+        {
+          return false;
+        }
+        cells.push(pt);
+        return true;
+      }
+    };
+  }
+  function pointDistance(a, b) {
+    return a.distanceTo(b);
   }
 });
 
