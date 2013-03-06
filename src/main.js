@@ -21,16 +21,19 @@ window.Chem.onReady(function () {
     treeAdult: {
       name: "Adult Tree",
       color: '#002702',
+      texture: Chem.getImage('tree'),
       walkable: false,
     },
     safe: {
       name: "Safe",
       color: '#48C13C',
+      texture: Chem.getImage('dirt'),
       walkable: true,
     },
     fatal: {
       name: "Fatal",
       color: '#860600',
+      texture: Chem.getImage('danger'),
       walkable: true,
     },
     danger: {
@@ -41,16 +44,13 @@ window.Chem.onReady(function () {
     cleanWater: {
       name: "Clean Water",
       color: '#548FC4',
+      texture: Chem.getImage('water'),
       walkable: false,
     },
     contaminatedWater: {
       name: "Contaminated Water",
       color: '#6D2A49',
-      walkable: false,
-    },
-    fatalWater: {
-      name: "Fatal Water",
-      color: '#350024',
+      texture: Chem.getImage('evilwater'),
       walkable: false,
     },
   };
@@ -205,8 +205,12 @@ window.Chem.onReady(function () {
         if (! row[it.x].explored) continue;
         var pos = toScreen(it);
         var cell = row[it.x];
-        context.fillStyle = cell.terrain.color;
-        context.fillRect(pos.x, pos.y, size.x, size.y);
+        if (cell.terrain.texture) {
+          context.drawImage(cell.terrain.texture, pos.x, pos.y);
+        } else {
+          context.fillStyle = cell.terrain.color;
+          context.fillRect(pos.x, pos.y, size.x, size.y);
+        }
       }
     }
     // draw all sprites in batch
@@ -430,7 +434,7 @@ window.Chem.onReady(function () {
     } else if (terrain === landType.danger) {
       return landType.contaminatedWater;
     } else if (terrain === landType.fatal) {
-      return landType.fatalWater;
+      return landType.contaminatedWater;
     } else if (terrain === landType.treeAdult) {
       return landType.cleanWater;
     } else {

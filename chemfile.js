@@ -31,5 +31,20 @@ exports.spritesheet = {
       anchor: 'bottom',
       frames: 'man',
     },
+    evilwater: {
+      anchor: 'topleft',
+    },
+    water: {
+      anchor: 'topleft',
+    },
+    dirt: {
+      anchor: 'topleft',
+    },
+    danger: {
+      anchor: 'topleft',
+    },
+    tree: {
+      anchor: 'topleft',
+    },
   }
 };
