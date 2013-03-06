@@ -96,19 +96,15 @@ window.Chem.onReady(function () {
     }
     scroll.floor();
 
-    var filledAreas = {};
     var id, member;
-    for (id in crew) {
-      member = crew[id];
-      filledAreas[member.pos.floored()] = member;
-    }
 
     for (id in crew) {
       member = crew[id];
 
       // get hurt by dangerous land
       var loc = member.pos.floored();
-      var terrain = grid[loc.y][loc.x].terrain;
+      var cell = grid[loc.y][loc.x];
+      var terrain = cell.terrain;
       if (terrain === landType.danger) {
         member.health -= 0.005 * dx;
       } else if (terrain === landType.fatal) {
@@ -118,6 +114,7 @@ window.Chem.onReady(function () {
         die(member);
         return;
       }
+
 
       // explore areas around crew members
       for (var y = -crewLosRadius; y < crewLosRadius; ++y) {
@@ -135,38 +132,46 @@ window.Chem.onReady(function () {
       var vel = member.inputs.direction.scaled(member.inputs.speed * dx);
       var newPos = member.pos.plus(vel);
       var newPosFloored = newPos.floored();
-      var entity = filledAreas[newPosFloored];
-      var newTerrain = grid[newPosFloored.y][newPosFloored.x].terrain;
-      if ((!entity || entity === member) && newTerrain.walkable) {
+      if (! newPosFloored.equals(member.pos.floored())) {
+        var newCell = grid[newPosFloored.y][newPosFloored.x];
+        if (newCell.entity == null && newCell.terrain.walkable) {
+          cell.entity = null;
+          member.pos = newPos;
+          newCell.entity = member;
+        }
+      } else {
         member.pos = newPos;
       }
 
+
       // crew member AI
-      if (member.task && member.task.name === 'walk') {
-        if (member.task.state === 'off') {
-          member.task.path = computePath(member, member.task.pos, filledAreas);
-          member.task.state = 'path';
-        }
-        if (member.task.state === 'path') {
-          var nextNode = member.task.path[0].offset(0.5, 0.5);
-          if (nextNode.distanceTo(member.pos) < crewMaxSpeed) {
-            member.task.path.shift();
-            if (member.task.path.length === 0) {
-              // done following path
-              member.pos = nextNode;
-              if (member.pos.floored().equals(member.task.pos.floored())) {
-                // task complete
-                member.task = null;
-                member.inputs.speed = 0;
-              } else {
-                // recompute path
-                member.task.state = 'off';
-                member.inputs.speed = 0;
+      if (member.task) {
+        if (member.task.name === 'walk') {
+          if (member.task.state === 'off') {
+            member.task.path = computePath(member, member.task.pos);
+            member.task.state = 'path';
+          }
+          if (member.task.state === 'path') {
+            var nextNode = member.task.path[0].offset(0.5, 0.5);
+            if (nextNode.distanceTo(member.pos) < crewMaxSpeed) {
+              member.task.path.shift();
+              if (member.task.path.length === 0) {
+                // done following path
+                member.pos = nextNode;
+                if (member.pos.floored().equals(member.task.pos.floored())) {
+                  // task complete
+                  member.task = null;
+                  member.inputs.speed = 0;
+                } else {
+                  // recompute path
+                  member.task.state = 'off';
+                  member.inputs.speed = 0;
+                }
               }
+            } else {
+              member.inputs.direction = nextNode.minus(member.pos).normalize();
+              member.inputs.speed = crewMaxSpeed;
             }
-          } else {
-            member.inputs.direction = nextNode.minus(member.pos).normalize();
-            member.inputs.speed = crewMaxSpeed;
           }
         }
       }
@@ -347,6 +352,7 @@ window.Chem.onReady(function () {
         pos: pos.times(cellSize),
       }),
     };
+    grid[pos.y][pos.x].entity = crew[id];
   }
 
   function gridFromPerlinNoise() {
@@ -508,7 +514,7 @@ window.Chem.onReady(function () {
     return arr;
   }
 
-  function computePath(member, dest, filledAreas) {
+  function computePath(member, dest) {
     // compute path
     var results = aStar({
       start: member.pos.floored(),
@@ -572,9 +578,9 @@ window.Chem.onReady(function () {
         {
           return false;
         }
-        var terrain = grid[pt.y][pt.x].terrain;
-        var entity = filledAreas[pt];
-        if (!terrain.walkable || entity || terrain === landType.fatal) {
+        var cell = grid[pt.y][pt.x];
+        var terrain = cell.terrain;
+        if (!terrain.walkable || cell.entity || terrain === landType.fatal) {
           return false;
         }
         cells.push(pt);
@@ -601,9 +607,8 @@ window.Chem.onReady(function () {
         {
           return false;
         }
-        var terrain = grid[pt.y][pt.x].terrain;
-        var entity = filledAreas[pt];
-        if (terrain !== landType.safe || entity) return false;
+        var cell = grid[pt.y][pt.x];
+        if (cell.terrain !== landType.safe || cell.entity) return false;
         cells.push(pt);
         return true;
       }
