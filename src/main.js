@@ -144,35 +144,8 @@ window.Chem.onReady(function () {
       // crew member AI
       if (member.task && member.task.name === 'walk') {
         if (member.task.state === 'off') {
+          member.task.path = computePath(member, member.task.pos, filledAreas);
           member.task.state = 'path';
-          // compute path
-          var results = aStar({
-            start: member.pos.floored(),
-            isEnd: createIsEnd(member),
-            neighbor: neighborFn,
-            distance: distanceFn,
-            heuristic: createHeuristicFn(member),
-            timeout: 50,
-          });
-          if (results.path.length === 1) {
-            // compute unsafe path
-            results = aStar({
-              start: member.pos.floored(),
-              isEnd: createIsEnd(member),
-              neighbor: unsafeNeighborFn,
-              distance: distanceFn,
-              heuristic: createUnsafeHeuristicFn(member),
-              timeout: 50,
-            });
-            if (results.path.length === 1) {
-              // as a last ditch effort, make a beeline for dest
-              member.task.path = [member.task.pos];
-            } else {
-              member.task.path = results.path.slice(1);
-            }
-          } else {
-            member.task.path = results.path.slice(1);
-          }
         }
         if (member.task.state === 'path') {
           var nextNode = member.task.path[0].offset(0.5, 0.5);
@@ -197,82 +170,6 @@ window.Chem.onReady(function () {
           }
         }
       }
-    }
-    function createUnsafeHeuristicFn(member) {
-      return function (node) {
-        var terrainAtNode = grid[node.y][node.x].terrain;
-        var unsafePenalty = (terrainAtNode === landType.danger) ? 100 : 0;
-        return node.distanceTo(member.task.pos) + unsafePenalty;
-      };
-    }
-    function createHeuristicFn(member) {
-      return function (node) {
-        return node.distanceTo(member.task.pos);
-      };
-    }
-    function distanceFn(a, b) {
-      return a.distanceTo(b);
-    }
-    function unsafeNeighborFn(node) {
-      var cells = [];
-      var leftSafe = addIfSafe(v(-1, 0));
-      var rightSafe = addIfSafe(v(1, 0));
-      var topSafe = addIfSafe(v(0, -1));
-      var bottomSafe = addIfSafe(v(0, 1));
-      // add the corners if safe
-      if (leftSafe && topSafe) addIfSafe(v(-1, -1));
-      if (rightSafe && topSafe) addIfSafe(v(1, -1));
-      if (leftSafe && bottomSafe) addIfSafe(v(-1, 1));
-      if (rightSafe && bottomSafe) addIfSafe(v(1, 1));
-      return cells;
-
-      function addIfSafe(vec) {
-        var pt = node.plus(vec);
-        if (pt.x >= gridSize.x || pt.x < 0 ||
-            pt.y >= gridSize.y || pt.y < 0)
-        {
-          return false;
-        }
-        var terrain = grid[pt.y][pt.x].terrain;
-        var entity = filledAreas[pt];
-        if (!terrain.walkable || entity || terrain === landType.fatal) {
-          return false;
-        }
-        cells.push(pt);
-        return true;
-      }
-    }
-    function neighborFn(node) {
-      var cells = [];
-      var leftSafe = addIfSafe(v(-1, 0));
-      var rightSafe = addIfSafe(v(1, 0));
-      var topSafe = addIfSafe(v(0, -1));
-      var bottomSafe = addIfSafe(v(0, 1));
-      // add the corners if safe
-      if (leftSafe && topSafe) addIfSafe(v(-1, -1));
-      if (rightSafe && topSafe) addIfSafe(v(1, -1));
-      if (leftSafe && bottomSafe) addIfSafe(v(-1, 1));
-      if (rightSafe && bottomSafe) addIfSafe(v(1, 1));
-      return cells;
-
-      function addIfSafe(vec) {
-        var pt = node.plus(vec);
-        if (pt.x >= gridSize.x || pt.x < 0 ||
-            pt.y >= gridSize.y || pt.y < 0)
-        {
-          return false;
-        }
-        var terrain = grid[pt.y][pt.x].terrain;
-        var entity = filledAreas[pt];
-        if (terrain !== landType.safe || entity) return false;
-        cells.push(pt);
-        return true;
-      }
-    }
-    function createIsEnd(member) {
-      return function(node) {
-        return node.equals(member.task.pos.floored());
-      };
     }
   });
   engine.on('draw', function (context) {
@@ -368,15 +265,25 @@ window.Chem.onReady(function () {
   }
 
   function onMapRightClick() {
-    var pos = fromScreen(engine.mouse_pos).floor().offset(0.5, 0.5);
+    var posFloored = fromScreen(engine.mouse_pos).floor();
+    var pos = posFloored.offset(0.5, 0.5);
+    var cell = grid[posFloored.y][posFloored.x];
     for (var id in crew) {
       var member = crew[id];
       if (member.selected) {
-        member.task = {
-          name: 'walk',
-          pos: pos.clone(),
-          state: 'off',
-        };
+        if (cell.terrain.walkable) {
+          member.task = {
+            name: 'walk',
+            pos: pos.clone(),
+            state: 'off',
+          };
+        } else if (cell.terrain === landType.treeAdult) {
+          member.task = {
+            name: 'chop',
+            pos: posFloored,
+            state: 'off',
+          };
+        }
       }
     }
   }
@@ -516,6 +423,8 @@ window.Chem.onReady(function () {
       return landType.contaminatedWater;
     } else if (terrain === landType.fatal) {
       return landType.fatalWater;
+    } else if (terrain === landType.treeAdult) {
+      return landType.cleanWater;
     } else {
       return terrain;
     }
@@ -597,6 +506,114 @@ window.Chem.onReady(function () {
       arr[y] = new Array(w);
     }
     return arr;
+  }
+
+  function computePath(member, dest, filledAreas) {
+    // compute path
+    var results = aStar({
+      start: member.pos.floored(),
+      isEnd: createIsEnd(),
+      neighbor: neighborFn,
+      distance: distanceFn,
+      heuristic: createHeuristicFn(member),
+      timeout: 50,
+    });
+    if (results.path.length === 1) {
+      // compute unsafe path
+      results = aStar({
+        start: member.pos.floored(),
+        isEnd: createIsEnd(),
+        neighbor: unsafeNeighborFn,
+        distance: distanceFn,
+        heuristic: createUnsafeHeuristicFn(member),
+        timeout: 50,
+      });
+      if (results.path.length === 1) {
+        // as a last ditch effort, make a beeline for dest
+        return [dest];
+      } else {
+        return results.path.slice(1);
+      }
+    } else {
+      return results.path.slice(1);
+    }
+    function createUnsafeHeuristicFn(member) {
+      return function (node) {
+        var terrainAtNode = grid[node.y][node.x].terrain;
+        var unsafePenalty = (terrainAtNode === landType.danger) ? 100 : 0;
+        return node.distanceTo(member.task.pos) + unsafePenalty;
+      };
+    }
+    function createHeuristicFn(member) {
+      return function (node) {
+        return node.distanceTo(member.task.pos);
+      };
+    }
+    function distanceFn(a, b) {
+      return a.distanceTo(b);
+    }
+    function unsafeNeighborFn(node) {
+      var cells = [];
+      var leftSafe = addIfSafe(v(-1, 0));
+      var rightSafe = addIfSafe(v(1, 0));
+      var topSafe = addIfSafe(v(0, -1));
+      var bottomSafe = addIfSafe(v(0, 1));
+      // add the corners if safe
+      if (leftSafe && topSafe) addIfSafe(v(-1, -1));
+      if (rightSafe && topSafe) addIfSafe(v(1, -1));
+      if (leftSafe && bottomSafe) addIfSafe(v(-1, 1));
+      if (rightSafe && bottomSafe) addIfSafe(v(1, 1));
+      return cells;
+
+      function addIfSafe(vec) {
+        var pt = node.plus(vec);
+        if (pt.x >= gridSize.x || pt.x < 0 ||
+            pt.y >= gridSize.y || pt.y < 0)
+        {
+          return false;
+        }
+        var terrain = grid[pt.y][pt.x].terrain;
+        var entity = filledAreas[pt];
+        if (!terrain.walkable || entity || terrain === landType.fatal) {
+          return false;
+        }
+        cells.push(pt);
+        return true;
+      }
+    }
+    function neighborFn(node) {
+      var cells = [];
+      var leftSafe = addIfSafe(v(-1, 0));
+      var rightSafe = addIfSafe(v(1, 0));
+      var topSafe = addIfSafe(v(0, -1));
+      var bottomSafe = addIfSafe(v(0, 1));
+      // add the corners if safe
+      if (leftSafe && topSafe) addIfSafe(v(-1, -1));
+      if (rightSafe && topSafe) addIfSafe(v(1, -1));
+      if (leftSafe && bottomSafe) addIfSafe(v(-1, 1));
+      if (rightSafe && bottomSafe) addIfSafe(v(1, 1));
+      return cells;
+
+      function addIfSafe(vec) {
+        var pt = node.plus(vec);
+        if (pt.x >= gridSize.x || pt.x < 0 ||
+            pt.y >= gridSize.y || pt.y < 0)
+        {
+          return false;
+        }
+        var terrain = grid[pt.y][pt.x].terrain;
+        var entity = filledAreas[pt];
+        if (terrain !== landType.safe || entity) return false;
+        cells.push(pt);
+        return true;
+      }
+    }
+    function createIsEnd() {
+      var end = dest.floored();
+      return function(node) {
+        return node.equals(end);
+      };
+    }
   }
 
   function createSafeStartArea() {
