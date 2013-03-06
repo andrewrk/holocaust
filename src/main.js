@@ -16,7 +16,7 @@ window.Chem.onReady(function () {
   var gridSize = v(gridWidth, gridHeight);
   var crew = {};
   var crewLosRadius = 4;
-  var crewChopRadius = 2;
+  var crewChopRadius = 1.6;
   var crewMaxSpeed = 0.1;
   var landType = {
     treeAdult: {
