@@ -43,6 +43,7 @@ exports.spritesheet = {
     danger: {
       anchor: 'topleft',
     },
+    sapling: {},
     tree: {
       anchor: 'topleft',
     },

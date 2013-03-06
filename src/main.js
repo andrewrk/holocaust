@@ -16,6 +16,7 @@ window.Chem.onReady(function () {
   var gridSize = v(gridWidth, gridHeight);
   var crew = {};
   var crewLosRadius = 4;
+  var crewChopRadius = 2;
   var crewMaxSpeed = 0.1;
   var landType = {
     treeAdult: {
@@ -54,6 +55,10 @@ window.Chem.onReady(function () {
       walkable: false,
     },
   };
+  var tasks = {
+    walk: performWalkTask,
+    chop: performChopTask,
+  };
 
   var grid = gridFromPerlinNoise();
 
@@ -63,6 +68,8 @@ window.Chem.onReady(function () {
   var miniMapBoxSize = v();
   var miniMapImage;
   var updateMiniMapTimer = null;
+  var seedCount = 0;
+  var seedResourceImage = Chem.getImage('sapling');
 
   createSafeStartArea();
   generateTerrainTextures();
@@ -138,6 +145,23 @@ window.Chem.onReady(function () {
         }
       }
 
+      if (member.inputs.chop) {
+        var chopPos = member.inputs.chop;
+        if (chopPos.distanceTo(member.pos) <= crewChopRadius) {
+          var chopCell = grid[chopPos.y][chopPos.x];
+          if (chopCell.terrain === landType.treeAdult) {
+            chopCell.chopCount = chopCell.chopCount || 1;
+            chopCell.chopCount -= 0.008 * dx;
+            if (chopCell.chopCount <= 0) {
+              seedCount += 2;
+              delete chopCell.chopCount;
+              chopCell.terrain = landType.safe;
+              generateMiniMap();
+            }
+          }
+        }
+      }
+
       // crew member physics
       var vel = member.inputs.direction.scaled(member.inputs.speed * dx);
       var newPos = member.pos.plus(vel);
@@ -155,35 +179,69 @@ window.Chem.onReady(function () {
 
 
       // crew member AI
-      if (member.task) {
-        if (member.task.name === 'walk') {
-          if (member.task.state === 'off') {
-            member.task.path = computePath(member, member.task.pos);
-            member.task.state = 'path';
-          }
-          if (member.task.state === 'path') {
-            var nextNode = member.task.path[0].offset(0.5, 0.5);
-            if (nextNode.distanceTo(member.pos) < crewMaxSpeed) {
-              member.task.path.shift();
-              if (member.task.path.length === 0) {
-                // done following path
-                member.pos = nextNode;
-                if (member.pos.floored().equals(member.task.pos.floored())) {
-                  // task complete
-                  member.task = null;
-                  member.inputs.speed = 0;
-                } else {
-                  // recompute path
-                  member.task.state = 'off';
-                  member.inputs.speed = 0;
-                }
-              }
-            } else {
-              member.inputs.direction = nextNode.minus(member.pos).normalize();
-              member.inputs.speed = crewMaxSpeed;
-            }
+      if (member.task) tasks[member.task.name](member);
+    }
+  }
+
+  function performChopTask(member) {
+    if (member.task.state === 'off') {
+      if (member.pos.distanceTo(member.task.pos) < crewChopRadius) {
+        member.task.state = 'chop';
+        member.inputs.chop = member.task.pos;
+      } else {
+        member.task.path = computePath(member, member.task.pos, 1);
+        member.task.state = 'path';
+      }
+    }
+    if (member.task.state === 'chop') {
+      var chopCell = grid[member.task.pos.y][member.task.pos.x];
+      if (chopCell.terrain !== landType.treeAdult) {
+        // mission accomplished
+        member.task = null;
+        member.inputs.chop = null;
+      }
+    } else if (member.task.state === 'path') {
+      var nextNode = member.task.path[0].offset(0.5, 0.5);
+      if (nextNode.distanceTo(member.pos) < crewMaxSpeed) {
+        member.task.path.shift();
+        if (member.task.path.length === 0) {
+          // done following path
+          member.pos = nextNode;
+          member.task.state = 'off';
+          member.inputs.speed = 0;
+        }
+      } else {
+        member.inputs.direction = nextNode.minus(member.pos).normalize();
+        member.inputs.speed = crewMaxSpeed;
+      }
+    }
+  }
+
+  function performWalkTask(member) {
+    if (member.task.state === 'off') {
+      member.task.path = computePath(member, member.task.pos);
+      member.task.state = 'path';
+    }
+    if (member.task.state === 'path') {
+      var nextNode = member.task.path[0].offset(0.5, 0.5);
+      if (nextNode.distanceTo(member.pos) < crewMaxSpeed) {
+        member.task.path.shift();
+        if (member.task.path.length === 0) {
+          // done following path
+          member.pos = nextNode;
+          if (member.pos.floored().equals(member.task.pos.floored())) {
+            // task complete
+            member.task = null;
+            member.inputs.speed = 0;
+          } else {
+            // recompute path
+            member.task.state = 'off';
+            member.inputs.speed = 0;
           }
         }
+      } else {
+        member.inputs.direction = nextNode.minus(member.pos).normalize();
+        member.inputs.speed = crewMaxSpeed;
       }
     }
   }
@@ -205,7 +263,11 @@ window.Chem.onReady(function () {
         if (! row[it.x].explored) continue;
         var pos = toScreen(it);
         var cell = row[it.x];
-        if (cell.terrain.texture) {
+        if (cell.chopCount) {
+          context.drawImage(cell.terrain.texture, 0, 0,
+              cell.terrain.texture.width, size.y * cell.chopCount, pos.x, pos.y,
+              cell.terrain.texture.width, size.y * cell.chopCount);
+        } else if (cell.terrain.texture) {
           context.drawImage(cell.terrain.texture, pos.x, pos.y);
         } else {
           context.fillStyle = cell.terrain.color;
@@ -244,6 +306,12 @@ window.Chem.onReady(function () {
     context.strokeStyle = '#ffffff';
     context.strokeRect(mouseCellPos.x, mouseCellPos.y, mouseCellSize.x, mouseCellSize.y);
 
+    // resource counts
+    context.drawImage(seedResourceImage, 10, 10);
+    context.fillStyle = "#ffffff";
+    context.font = "normal 16px Arial";
+    context.fillText("" + seedCount, 32, 26);
+
     // mini map
     context.drawImage(miniMapImage, miniMapPos.x, miniMapPos.y);
     var miniMapTopLeft = fromScreen(v(0, 0));
@@ -281,20 +349,26 @@ window.Chem.onReady(function () {
       var member = crew[id];
       if (member.selected) {
         if (cell.terrain.walkable) {
-          member.task = {
+          assignTask(member, {
             name: 'walk',
             pos: pos.clone(),
             state: 'off',
-          };
+          });
         } else if (cell.terrain === landType.treeAdult) {
-          member.task = {
+          assignTask(member, {
             name: 'chop',
             pos: posFloored,
             state: 'off',
-          };
+          });
         }
       }
     }
+  }
+
+  function assignTask(member, task) {
+    member.inputs.chop = null;
+    member.inputs.speed = 0;
+    member.task = task;
   }
 
   function onMapLeftClick() {
@@ -520,7 +594,8 @@ window.Chem.onReady(function () {
     return arr;
   }
 
-  function computePath(member, dest) {
+  function computePath(member, dest, endRadius) {
+    endRadius = endRadius || 0.0000001;
     // compute path
     var results = aStar({
       start: member.pos.floored(),
@@ -622,7 +697,7 @@ window.Chem.onReady(function () {
     function createIsEnd() {
       var end = dest.floored();
       return function(node) {
-        return node.equals(end);
+        return node.distanceTo(end) <= endRadius;
       };
     }
   }
