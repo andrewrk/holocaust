@@ -842,6 +842,7 @@ window.Chem.onReady(function () {
     for (y = startPos.y - startSize.y; y < startPos.y + startSize.y; ++y) {
       for (x = startPos.x - startSize.x; x < startPos.x + startSize.x; ++x) {
         grid[y][x].terrain = landType.safe;
+        grid[y][x].plant = null;
       }
     }
     for (y = startPos.y - 1; y < startPos.y + 1; ++y) {
