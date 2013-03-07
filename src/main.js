@@ -275,15 +275,14 @@ window.Chem.onReady(function () {
         if (! row[it.x].explored) continue;
         var pos = toScreen(it);
         var cell = row[it.x];
+        context.fillStyle = cell.terrain.color;
+        context.fillRect(pos.x, pos.y, size.x, size.y);
         if (cell.chopCount) {
-          context.drawImage(cell.terrain.texture, 0, 0,
-              cell.terrain.texture.width, size.y * cell.chopCount, pos.x, pos.y,
+          context.drawImage(cell.terrain.texture, 0, size.y * (1 - cell.chopCount),
+              cell.terrain.texture.width, size.y * cell.chopCount, pos.x, pos.y + size.y * (1 - cell.chopCount),
               cell.terrain.texture.width, size.y * cell.chopCount);
         } else if (cell.terrain.texture) {
           context.drawImage(cell.terrain.texture, pos.x, pos.y);
-        } else {
-          context.fillStyle = cell.terrain.color;
-          context.fillRect(pos.x, pos.y, size.x, size.y);
         }
       }
     }
