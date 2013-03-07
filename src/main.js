@@ -137,6 +137,7 @@ window.Chem.onReady(function () {
       for (var y = -crewLosRadius; y < crewLosRadius; ++y) {
         for (var x = -crewLosRadius; x < crewLosRadius; ++x) {
           var targetPos = loc.offset(x, y);
+          if (! inGrid(targetPos)) continue;
           if (targetPos.distanceTo(member.pos) <= crewLosRadius) {
             if (!grid[targetPos.y][targetPos.x].explored) {
               explore(member, targetPos);
@@ -350,6 +351,9 @@ window.Chem.onReady(function () {
     var end = start.plus(size);
     return pos.x >= start.x && pos.x < end.x &&
       pos.y >= start.y && pos.y < end.y;
+  }
+  function inGrid(vec) {
+    return vec.x >= 0 && vec.y >= 0 && vec.x < gridSize.x && vec.y < gridSize.y;
   }
 
   function onMapRightClick() {
