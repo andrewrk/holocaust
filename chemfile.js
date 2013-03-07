@@ -37,6 +37,9 @@ exports.spritesheet = {
     water: {
       anchor: 'topleft',
     },
+    oxygendirt: {
+      anchor: 'topleft',
+    },
     dirt: {
       anchor: 'topleft',
     },

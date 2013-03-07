@@ -36,30 +36,42 @@ window.Chem.onReady(function () {
       color: '#48C13C',
       texture: Chem.getImage('dirt'),
       walkable: true,
+      plantable: true,
     },
     fatal: {
       name: "Fatal",
       color: '#860600',
       texture: Chem.getImage('danger'),
       walkable: true,
+      plantable: false,
+    },
+    oxygenated: {
+      name: "Oxygenated Land",
+      color: '#3CC162',
+      texture: Chem.getImage('oxygendirt'),
+      walkable: true,
+      plantable: true,
     },
     danger: {
       name: "Danger",
       color: '#F30B00',
       texture: Chem.getImage('dirtno2'),
       walkable: true,
+      plantable: true,
     },
     cleanWater: {
       name: "Clean Water",
       color: '#548FC4',
       texture: Chem.getImage('water'),
       walkable: false,
+      plantable: false,
     },
     contaminatedWater: {
       name: "Contaminated Water",
       color: '#6D2A49',
       texture: Chem.getImage('evilwater'),
       walkable: false,
+      plantable: false,
     },
   };
   var crewOptions = [
@@ -201,13 +213,13 @@ window.Chem.onReady(function () {
         var chopPos = member.inputs.chop;
         if (chopPos.distanceTo(member.pos) <= crewChopRadius) {
           var chopCell = grid[chopPos.y][chopPos.x];
-          if (chopCell.plant && (! chopCell.plant.growing)) {
-            chopCell.plant.chopCount = chopCell.plant.chopCount || 1;
-            chopCell.plant.chopCount -= 0.008 * dx;
-            if (chopCell.plant.chopCount <= 0) {
-              seedCount += 2;
+          plant = chopCell.plant;
+          if (plant && (! plant.growing)) {
+            plant.chopCount = plant.chopCount || 1;
+            plant.chopCount -= 0.008 * dx;
+            if (plant.chopCount <= 0) {
               delete chopCell.plant;
-              updateMiniMap();
+              plantDestroyed(plant);
             }
           }
         }
@@ -215,9 +227,7 @@ window.Chem.onReady(function () {
         var plantPos = member.inputs.plant.pos;
         if (plantPos.distanceTo(member.pos) <= crewChopRadius) {
           var plantCell = grid[plantPos.y][plantPos.x];
-          if ((plantCell.terrain === landType.safe || plantCell.terrain === landType.danger) &&
-               seedCount > 0 && !plantCell.plant)
-          {
+          if (plantCell.terrain.plantable && seedCount > 0 && !plantCell.plant) {
             plant = {
               id: nextId(),
               growing: 1,
@@ -243,7 +253,54 @@ window.Chem.onReady(function () {
   }
 
   function plantFinishGrowing(plant) {
+    // make the area around the plant oxygenated
+    for (var y = -1; y <= 1; ++y) {
+      for (var x = -1; x <= 1; ++x) {
+        computeOxygenation(plant.pos.offset(x, y));
+      }
+    }
     updateMiniMap();
+  }
+
+  function plantDestroyed(plant) {
+    for (var y = -1; y <= 1; ++y) {
+      for (var x = -1; x <= 1; ++x) {
+        computeOxygenation(plant.pos.offset(x, y));
+      }
+    }
+    seedCount += 2;
+    updateMiniMap();
+  }
+
+  function computeOxygenation(pt) {
+    var cell = grid[pt.y][pt.x];
+    var neighborPlantCount = getNeighborCount(pt, function(cell) { return cell.plant });
+    if (cell.terrain === landType.danger && neighborPlantCount > 0) {
+      oxygenateCell(cell);
+    } else if (cell.terrain === landType.oxygenated && neighborPlantCount === 0) {
+      deoxygenateCell(cell);
+    }
+  }
+
+  function oxygenateCell(cell) {
+    cell.terrain = landType.oxygenated;
+  }
+
+  function deoxygenateCell(cell) {
+    cell.terrain = landType.danger;
+  }
+
+  function getNeighborCount(pt, matchFn) {
+    var count = 0;
+    for (var y = -1; y <= 1; ++y) {
+      for (var x = -1; x <= 1; ++x) {
+        if (x === 0 && y === 0) continue;
+        var thisPt = pt.offset(x, y);
+        var thisCell = grid[thisPt.y][thisPt.x];
+        if (matchFn(thisCell)) count += 1;
+      }
+    }
+    return count;
   }
 
   function updateCrewPos(member, newPos) {
@@ -526,7 +583,7 @@ window.Chem.onReady(function () {
   function commandToPlantShrub(member, pos) {
     var posFloored = pos.floored();
     var cell = grid[posFloored.y][posFloored.x];
-    if (cell.terrain === landType.safe || cell.terrain === landType.danger) {
+    if (cell.terrain.plantable) {
       assignTask(member, {
         name: 'plant',
         pos: posFloored,
@@ -667,6 +724,7 @@ window.Chem.onReady(function () {
         if (cell.terrain === landType.treeAdult) {
           cell.plant = {
             type: 'shrub',
+            pos: v(x, y),
           };
           cell.terrain = landType.safe;
         }
@@ -849,6 +907,7 @@ window.Chem.onReady(function () {
       for (x = startPos.x - 1; x < startPos.x + 1; ++x) {
         grid[y][x].plant = {
           type: 'shrub',
+          pos: v(x, y),
         };
       }
     }
@@ -957,9 +1016,8 @@ window.Chem.onReady(function () {
         }
         var cell = grid[pt.y][pt.x];
         var terrain = cell.terrain;
-        if ((!extraWalkableCells || !extraWalkableCells(cell)) && (cell.entity || cell.plant ||
-            (unsafe && (!terrain.walkable || terrain === landType.fatal)) ||
-            (!unsafe && (terrain !== landType.safe))))
+        if ((!extraWalkableCells || !extraWalkableCells(cell)) && (cell.entity || cell.plant || cell.walkable ||
+            (unsafe && (terrain === landType.fatal)) || (!unsafe && !terrain.safe)))
         {
           return false;
         }
