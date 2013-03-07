@@ -40,10 +40,27 @@ exports.spritesheet = {
     dirt: {
       anchor: 'topleft',
     },
+    dirtno2: {
+      anchor: 'topleft',
+    },
     danger: {
       anchor: 'topleft',
     },
-    sapling: {},
+    sapling: {
+      anchor: 'topleft',
+    },
+    saplingbutton: {
+      anchor: 'topleft',
+    },
+    foodbutton: {
+      anchor: 'topleft',
+    },
+    walkicon: {
+      anchor: 'topleft',
+    },
+    axe: {
+      anchor: 'topleft',
+    },
     tree: {
       anchor: 'topleft',
     },

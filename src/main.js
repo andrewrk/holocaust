@@ -10,6 +10,7 @@ window.Chem.onReady(function () {
 
   engine.setSize(v(1067, 600));
 
+  var lastId = 0;
   var cellSize = v(6, 6);
   var gridWidth = Math.floor(canvas.width / cellSize.x);
   var gridHeight = Math.floor(canvas.height / cellSize.y);
@@ -18,12 +19,16 @@ window.Chem.onReady(function () {
   var crewLosRadius = 4;
   var crewChopRadius = 1.6;
   var crewMaxSpeed = 0.1;
+  var saplingImage = Chem.getImage('sapling');
+  var axeImage = Chem.getImage('axe');
+  var plantTypes = {
+    sapling: {
+      image: saplingImage,
+    },
+  };
   var landType = {
-    treeAdult: {
-      name: "Adult Tree",
-      color: '#002702',
-      texture: Chem.getImage('tree'),
-      walkable: false,
+    treeAdult: { // dummy, used for generation and then gets replaced
+      color: '#000000',
     },
     safe: {
       name: "Safe",
@@ -40,6 +45,7 @@ window.Chem.onReady(function () {
     danger: {
       name: "Danger",
       color: '#F30B00',
+      texture: Chem.getImage('dirtno2'),
       walkable: true,
     },
     cleanWater: {
@@ -55,9 +61,26 @@ window.Chem.onReady(function () {
       walkable: false,
     },
   };
+  var crewOptions = [
+    {
+      fn: commandToWalk,
+      key: Chem.Button.Key_1,
+      keyText: "1",
+      help: "Walk to the destination.",
+      image: Chem.getImage('walkicon'),
+    },
+    {
+      fn: commandToPlantSapling,
+      key: Chem.Button.Key_2,
+      keyText: "2",
+      help: "Plant a sapling.",
+      image: saplingImage,
+    },
+  ];
   var tasks = {
     walk: performWalkTask,
     chop: performChopTask,
+    plant: performPlantTask,
   };
 
   var grid = gridFromPerlinNoise();
@@ -66,10 +89,17 @@ window.Chem.onReady(function () {
   var scroll = engine.size.clone();
   var miniMapPos = engine.size.minus(gridSize).offset(-2, -2);
   var miniMapBoxSize = v();
+  var controlBoxPos = v(0, miniMapPos.y);
+  var controlBoxSize = v(miniMapPos.x, engine.size.y - controlBoxPos.y);
   var miniMapImage;
   var updateMiniMapTimer = null;
   var seedCount = 0;
-  var seedResourceImage = Chem.getImage('sapling');
+  var seedResourceImage = Chem.getImage('saplingbutton');
+  var foodCount = 0;
+  var foodResourceImage = Chem.getImage('foodbutton');
+  var anyCrewSelected = false;
+  var selectedCrewOption = 0;
+  var growingPlants = {};
 
   createSafeStartArea();
   generateTerrainTextures();
@@ -95,6 +125,15 @@ window.Chem.onReady(function () {
         setEverythingExplored();
       }
     }
+
+    if (anyCrewSelected) {
+      for (var i = 0; i < crewOptions.length; ++i) {
+        if (button === crewOptions[i].key) {
+          selectedCrewOption = i;
+          break;
+        }
+      }
+    }
   }
 
   function onUpdate(dt, dx) {
@@ -113,10 +152,22 @@ window.Chem.onReady(function () {
     }
     scroll.floor();
 
-    var id, member;
+    var id, plant;
+    for (id in growingPlants) {
+      plant = growingPlants[id];
+      plant.growing -= 0.002 * dx;
+      if (plant.growing <= 0) {
+        delete plant.growing;
+        delete growingPlants[id];
+        plantFinishGrowing(plant);
+      }
+    }
 
+    anyCrewSelected = false;
     for (id in crew) {
-      member = crew[id];
+      var member = crew[id];
+
+      anyCrewSelected = anyCrewSelected || member.selected;
 
       // get hurt by dangerous land
       var loc = member.pos.floored();
@@ -131,7 +182,6 @@ window.Chem.onReady(function () {
         die(member);
         return;
       }
-
 
       // explore areas around crew members
       for (var y = -crewLosRadius; y < crewLosRadius; ++y) {
@@ -150,15 +200,33 @@ window.Chem.onReady(function () {
         var chopPos = member.inputs.chop;
         if (chopPos.distanceTo(member.pos) <= crewChopRadius) {
           var chopCell = grid[chopPos.y][chopPos.x];
-          if (chopCell.terrain === landType.treeAdult) {
+          if (chopCell.plant && (! chopCell.plant.growing)) {
             chopCell.chopCount = chopCell.chopCount || 1;
             chopCell.chopCount -= 0.008 * dx;
             if (chopCell.chopCount <= 0) {
               seedCount += 2;
               delete chopCell.chopCount;
-              chopCell.terrain = landType.safe;
+              delete chopCell.plant;
               generateMiniMap();
             }
+          }
+        }
+      } else if (member.inputs.plant) {
+        var plantPos = member.inputs.plant.pos;
+        if (plantPos.distanceTo(member.pos) <= crewChopRadius) {
+          var plantCell = grid[plantPos.y][plantPos.x];
+          if ((plantCell.terrain === landType.safe || plantCell.terrain === landType.danger) &&
+               seedCount > 0 && !plantCell.plant)
+          {
+            plant = {
+              id: nextId(),
+              growing: 1,
+              pos: plantPos,
+              type: member.inputs.plant.type,
+            };
+            plantCell.plant = plant;
+            growingPlants[plant.id] = plant;
+            seedCount -= 1;
           }
         }
       }
@@ -166,21 +234,49 @@ window.Chem.onReady(function () {
       // crew member physics
       var vel = member.inputs.direction.scaled(member.inputs.speed * dx);
       var newPos = member.pos.plus(vel);
-      var newPosFloored = newPos.floored();
-      if (! newPosFloored.equals(member.pos.floored())) {
-        var newCell = grid[newPosFloored.y][newPosFloored.x];
-        if (newCell.entity == null && newCell.terrain.walkable) {
-          cell.entity = null;
-          member.pos = newPos;
-          newCell.entity = member;
-        }
-      } else {
-        member.pos = newPos;
-      }
+      updateCrewPos(member, newPos);
 
 
       // crew member AI
       if (member.task) tasks[member.task.name](member);
+    }
+  }
+
+  function plantFinishGrowing(plant) {
+    // nothing to do
+  }
+
+  function updateCrewPos(member, newPos) {
+    var newPosFloored = newPos.floored();
+    var oldPos = member.pos.floored();
+    var cell = grid[oldPos.y][oldPos.x];
+    if (! newPosFloored.equals(member.pos.floored())) {
+      var newCell = grid[newPosFloored.y][newPosFloored.x];
+      if (newCell.entity == null && newCell.terrain.walkable && !newCell.plant) {
+        cell.entity = null;
+        member.pos = newPos;
+        newCell.entity = member;
+      }
+    } else {
+      member.pos = newPos;
+    }
+  }
+
+  function performPlantTask(member) {
+    if (member.task.state === 'off') {
+      if (member.pos.distanceTo(member.task.pos) < crewChopRadius) {
+        member.task.state = 'plant';
+        member.inputs.plant = {
+          pos: member.task.pos,
+          type: member.task.plantType,
+        };
+      } else {
+        member.task.path = computePath(member, member.task.pos, 1);
+        member.task.state = 'path';
+      }
+    }
+    if (member.task.state === 'path') {
+      followPath(member);
     }
   }
 
@@ -196,11 +292,11 @@ window.Chem.onReady(function () {
     }
     if (member.task.state === 'chop') {
       var chopCell = grid[member.task.pos.y][member.task.pos.x];
-      if (chopCell.terrain !== landType.treeAdult) {
+      if (!chopCell.plant) {
         // mission accomplished
         // look for close by tree
         var nextPos = findClosest(member.task.pos, crewLosRadius, function(cell) {
-          return cell.terrain === landType.treeAdult;
+          return !!cell.plant;
         });
         if (nextPos) {
           // chop next tree
@@ -213,48 +309,39 @@ window.Chem.onReady(function () {
         }
       }
     } else if (member.task.state === 'path') {
-      var nextNode = member.task.path[0].offset(0.5, 0.5);
-      if (nextNode.distanceTo(member.pos) < crewMaxSpeed) {
-        member.task.path.shift();
-        if (member.task.path.length === 0) {
-          // done following path
-          member.pos = nextNode;
-          member.task.state = 'off';
-          member.inputs.speed = 0;
-        }
-      } else {
-        member.inputs.direction = nextNode.minus(member.pos).normalize();
-        member.inputs.speed = crewMaxSpeed;
+      followPath(member);
+    }
+  }
+
+  function followPath(member) {
+    var nextNode = member.task.path[0].offset(0.5, 0.5);
+    if (nextNode.distanceTo(member.pos) < crewMaxSpeed) {
+      member.task.path.shift();
+      if (member.task.path.length === 0) {
+        // done following path
+        updateCrewPos(member, nextNode);
+        member.task.state = 'off';
+        member.inputs.speed = 0;
       }
+    } else {
+      member.inputs.direction = nextNode.minus(member.pos).normalize();
+      member.inputs.speed = crewMaxSpeed;
     }
   }
 
   function performWalkTask(member) {
     if (member.task.state === 'off') {
-      member.task.path = computePath(member, member.task.pos);
-      member.task.state = 'path';
+      if (member.pos.floored().equals(member.task.pos.floored())) {
+        // mission accomplished
+        member.task = null;
+        return;
+      } else {
+        member.task.path = computePath(member, member.task.pos);
+        member.task.state = 'path';
+      }
     }
     if (member.task.state === 'path') {
-      var nextNode = member.task.path[0].offset(0.5, 0.5);
-      if (nextNode.distanceTo(member.pos) < crewMaxSpeed) {
-        member.task.path.shift();
-        if (member.task.path.length === 0) {
-          // done following path
-          member.pos = nextNode;
-          if (member.pos.floored().equals(member.task.pos.floored())) {
-            // task complete
-            member.task = null;
-            member.inputs.speed = 0;
-          } else {
-            // recompute path
-            member.task.state = 'off';
-            member.inputs.speed = 0;
-          }
-        }
-      } else {
-        member.inputs.direction = nextNode.minus(member.pos).normalize();
-        member.inputs.speed = crewMaxSpeed;
-      }
+      followPath(member);
     }
   }
 
@@ -275,14 +362,27 @@ window.Chem.onReady(function () {
         if (! row[it.x].explored) continue;
         var pos = toScreen(it);
         var cell = row[it.x];
-        context.fillStyle = cell.terrain.color;
-        context.fillRect(pos.x, pos.y, size.x, size.y);
-        if (cell.chopCount) {
-          context.drawImage(cell.terrain.texture, 0, size.y * (1 - cell.chopCount),
-              cell.terrain.texture.width, size.y * cell.chopCount, pos.x, pos.y + size.y * (1 - cell.chopCount),
-              cell.terrain.texture.width, size.y * cell.chopCount);
-        } else if (cell.terrain.texture) {
+        if (cell.terrain.texture) {
           context.drawImage(cell.terrain.texture, pos.x, pos.y);
+        } else {
+          context.fillStyle = cell.terrain.color;
+          context.fillRect(pos.x, pos.y, size.x, size.y);
+        }
+        if (cell.plant) {
+          var plantImg = plantTypes[cell.plant.type].image;
+          if (cell.chopCount) {
+            context.drawImage(plantImg, 0, 0,
+                plantImg.width, plantImg.height * cell.chopCount, pos.x, pos.y,
+                plantImg.width, plantImg.height * cell.chopCount);
+          } else if (cell.plant.growing) {
+            var h = plantImg.height * (1 - cell.plant.growing);
+            if (h < 1) h = 1;
+            context.drawImage(plantImg, 0, 0,
+                plantImg.width, h, pos.x, pos.y,
+                plantImg.width, h);
+          } else {
+            context.drawImage(plantImg, pos.x, pos.y);
+          }
         }
       }
     }
@@ -312,23 +412,54 @@ window.Chem.onReady(function () {
     }
 
     // highlight the square you're mouse overing
-    var mouseCellPos = toScreen(fromScreen(engine.mouse_pos).floor());
-    var mouseCellSize = sizeToScreen(v(1, 1));
-    context.strokeStyle = '#ffffff';
-    context.strokeRect(mouseCellPos.x, mouseCellPos.y, mouseCellSize.x, mouseCellSize.y);
+    if (anyCrewSelected) {
+      var mouseCellPos = fromScreen(engine.mouse_pos).floor();
+      if (inGrid(mouseCellPos)) {
+        var mouseCell = grid[mouseCellPos.y][mouseCellPos.x];
+        var screenMouseCellPos = toScreen(mouseCellPos);
+        var img = mouseCell.plant ? axeImage : crewOptions[selectedCrewOption].image;
+        context.drawImage(img, screenMouseCellPos.x, screenMouseCellPos.y);
+      }
+    }
 
     // resource counts
+    // seed
     context.drawImage(seedResourceImage, 10, 10);
-    context.fillStyle = "#ffffff";
+    context.fillStyle = "#000000";
     context.font = "normal 16px Arial";
-    context.fillText("" + seedCount, 32, 26);
+    context.fillText("" + seedCount, 48, 32);
+    // food
+    context.drawImage(foodResourceImage, 90, 10);
+    context.fillStyle = "#000000";
+    context.font = "normal 16px Arial";
+    context.fillText("" + foodCount, 128, 32);
+
+    // control box
+    if (anyCrewSelected) {
+      // background
+      context.fillStyle = "#AAAAAA";
+      context.fillRect(controlBoxPos.x, controlBoxPos.y, controlBoxSize.x, controlBoxSize.y);
+      crewOptions.forEach(function(crewOption, index) {
+        var size = v(20, 20);
+        var pos = controlBoxPos.offset(10 + index * (10 + size.x), 10);
+        if (selectedCrewOption === index) {
+          // highlight this one
+          context.fillStyle = "#FFFB79";
+          context.fillRect(pos.x, pos.y, size.x, size.y);
+        }
+        context.drawImage(crewOption.image, pos.x, pos.y);
+        context.fillStyle = "#000000";
+        context.textAlign = 'center';
+        context.fillText(crewOption.keyText, pos.x + size.x / 2, pos.y + size.y + 12);
+      });
+    }
 
     // mini map
     context.drawImage(miniMapImage, miniMapPos.x, miniMapPos.y);
     var miniMapTopLeft = fromScreen(v(0, 0));
     var miniMapBottomRight = fromScreen(engine.size);
     miniMapBoxSize = miniMapBottomRight.minus(miniMapTopLeft);
-    context.strokeStyle = '#ffffff';
+    context.strokeStyle = '#696969';
     context.strokeRect(miniMapPos.x + miniMapTopLeft.x,
         miniMapPos.y + miniMapTopLeft.y,
         miniMapBoxSize.x, miniMapBoxSize.y);
@@ -356,26 +487,43 @@ window.Chem.onReady(function () {
   }
 
   function onMapRightClick() {
-    var posFloored = fromScreen(engine.mouse_pos).floor();
-    var pos = posFloored.offset(0.5, 0.5);
-    var cell = grid[posFloored.y][posFloored.x];
+    var pos = fromScreen(engine.mouse_pos);
+    var command = crewOptions[selectedCrewOption];
     for (var id in crew) {
       var member = crew[id];
-      if (member.selected) {
-        if (cell.terrain.walkable) {
-          assignTask(member, {
-            name: 'walk',
-            pos: pos.clone(),
-            state: 'off',
-          });
-        } else if (cell.terrain === landType.treeAdult) {
-          assignTask(member, {
-            name: 'chop',
-            pos: posFloored,
-            state: 'off',
-          });
-        }
-      }
+      if (member.selected) command.fn(member, pos);
+    }
+  }
+
+  function commandToWalk(member, pos) {
+    var posFloored = pos.floored();
+    pos = posFloored.offset(0.5, 0.5);
+    var cell = grid[posFloored.y][posFloored.x];
+    if (cell.plant) {
+      assignTask(member, {
+        name: 'chop',
+        pos: posFloored,
+        state: 'off',
+      });
+    } else if (cell.terrain.walkable) {
+      assignTask(member, {
+        name: 'walk',
+        pos: pos.clone(),
+        state: 'off',
+      });
+    }
+  }
+
+  function commandToPlantSapling(member, pos) {
+    var posFloored = pos.floored();
+    var cell = grid[posFloored.y][posFloored.x];
+    if (cell.terrain === landType.safe || cell.terrain === landType.danger) {
+      assignTask(member, {
+        name: 'plant',
+        pos: posFloored,
+        state: 'off',
+        plantType: 'sapling',
+      });
     }
   }
 
@@ -433,7 +581,7 @@ window.Chem.onReady(function () {
   }
 
   function createCrewMember(name, graphic, pos) {
-    var id = "" + Math.random();
+    var id = nextId();
     crew[id] = {
       id: id,
       graphic: graphic,
@@ -499,6 +647,19 @@ window.Chem.onReady(function () {
     while (waterCount < 1000) {
       waterCount += addRiver();
     }
+    // convert trees to plants
+    for (y = 0; y < gridHeight; ++y) {
+      for (x = 0; x < gridWidth; ++x) {
+        var cell = grid[y][x];
+        if (cell.terrain === landType.treeAdult) {
+          cell.plant = {
+            type: 'sapling',
+          };
+          cell.terrain = landType.safe;
+        }
+      }
+    }
+    return grid;
     function addRiver() {
       var count = 0;
       var it = v(Math.random() * gridSize.x, 0).floor();
@@ -517,7 +678,6 @@ window.Chem.onReady(function () {
       }
       return count;
     }
-    return grid;
   }
   function waterizeTerrain(terrain) {
     if (terrain === landType.safe) {
@@ -673,7 +833,9 @@ window.Chem.onReady(function () {
     }
     for (y = startPos.y - 1; y < startPos.y + 1; ++y) {
       for (x = startPos.x - 1; x < startPos.x + 1; ++x) {
-        grid[y][x].terrain = landType.treeAdult;
+        grid[y][x].plant = {
+          type: 'sapling',
+        };
       }
     }
     createCrewMember("Dean", "man", startPos.offset(-2, 0));
@@ -708,8 +870,13 @@ window.Chem.onReady(function () {
     context.fillRect(2, 2, gridSize.x, gridSize.y);
     for (var y = 0; y < gridSize.y; ++y) {
       for (var x = 0; x < gridSize.x; ++x) {
-        if (! grid[y][x].explored) continue;
-        context.fillStyle = grid[y][x].terrain.color;
+        var cell = grid[y][x];
+        if (! cell.explored) continue;
+        if (cell.plant) {
+          context.fillStyle = '#002702';
+        } else {
+          context.fillStyle = cell.terrain.color;
+        }
         context.fillRect(2 + x, 2 + y, 1, 1);
       }
     }
@@ -776,9 +943,9 @@ window.Chem.onReady(function () {
         }
         var cell = grid[pt.y][pt.x];
         var terrain = cell.terrain;
-        if (cell.entity ||
+        if ((!extraWalkableCells || !extraWalkableCells(cell)) && (cell.entity || cell.plant ||
             (unsafe && (!terrain.walkable || terrain === landType.fatal)) ||
-            (!unsafe && (terrain !== landType.safe && (!extraWalkableCells || !extraWalkableCells(cell)))))
+            (!unsafe && (terrain !== landType.safe))))
         {
           return false;
         }
@@ -789,6 +956,9 @@ window.Chem.onReady(function () {
   }
   function pointDistance(a, b) {
     return a.distanceTo(b);
+  }
+  function nextId() {
+    return "" + lastId++;
   }
 });
 
