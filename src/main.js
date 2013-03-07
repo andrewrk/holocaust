@@ -207,7 +207,7 @@ window.Chem.onReady(function () {
             if (chopCell.plant.chopCount <= 0) {
               seedCount += 2;
               delete chopCell.plant;
-              generateMiniMap();
+              updateMiniMap();
             }
           }
         }
@@ -243,7 +243,7 @@ window.Chem.onReady(function () {
   }
 
   function plantFinishGrowing(plant) {
-    // nothing to do
+    updateMiniMap();
   }
 
   function updateCrewPos(member, newPos) {
@@ -263,6 +263,14 @@ window.Chem.onReady(function () {
   }
 
   function performPlantTask(member) {
+    if (member.task.state === 'off' || member.task.state === 'plant') {
+      if (grid[member.task.pos.y][member.task.pos.x].plant) {
+        // nothing to do
+        member.task = null;
+        member.inputs.plant = null;
+        return;
+      }
+    }
     if (member.task.state === 'off') {
       if (member.pos.distanceTo(member.task.pos) < crewChopRadius) {
         member.task.state = 'plant';
@@ -476,7 +484,7 @@ window.Chem.onReady(function () {
         grid[y][x].explored = true;
       }
     }
-    generateMiniMap();
+    updateMiniMap();
   }
   function inside(pos, start, size) {
     var end = start.plus(size);
@@ -551,6 +559,10 @@ window.Chem.onReady(function () {
 
   function explore(crewMember, pos) {
     grid[pos.y][pos.x].explored = true;
+    updateMiniMap();
+  }
+
+  function updateMiniMap() {
     clearTimeout(updateMiniMapTimer);
     updateMiniMapTimer = setTimeout(generateMiniMap, 0);
   }
