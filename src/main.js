@@ -410,6 +410,9 @@ window.Chem.onReady(function () {
       crewMember.sprite.delete();
     });
     delete crew[crewMember.id];
+    var loc = crewMember.pos.floored();
+    var cell = grid[loc.y][loc.x];
+    cell.entity = null;
   }
 
   function toScreen(vec) {
