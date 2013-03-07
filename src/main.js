@@ -20,10 +20,11 @@ window.Chem.onReady(function () {
   var crewChopRadius = 1.6;
   var crewMaxSpeed = 0.1;
   var saplingImage = Chem.getImage('sapling');
+  var shrubImage = Chem.getImage('shrub');
   var axeImage = Chem.getImage('axe');
   var plantTypes = {
-    sapling: {
-      image: saplingImage,
+    shrub: {
+      image: shrubImage,
     },
   };
   var landType = {
@@ -70,11 +71,11 @@ window.Chem.onReady(function () {
       image: Chem.getImage('walkicon'),
     },
     {
-      fn: commandToPlantSapling,
+      fn: commandToPlantShrub,
       key: Chem.Button.Key_2,
       keyText: "2",
-      help: "Plant a sapling.",
-      image: saplingImage,
+      help: "Plant a shrub.",
+      image: shrubImage,
     },
   ];
   var tasks = {
@@ -201,11 +202,10 @@ window.Chem.onReady(function () {
         if (chopPos.distanceTo(member.pos) <= crewChopRadius) {
           var chopCell = grid[chopPos.y][chopPos.x];
           if (chopCell.plant && (! chopCell.plant.growing)) {
-            chopCell.chopCount = chopCell.chopCount || 1;
-            chopCell.chopCount -= 0.008 * dx;
-            if (chopCell.chopCount <= 0) {
+            chopCell.plant.chopCount = chopCell.plant.chopCount || 1;
+            chopCell.plant.chopCount -= 0.008 * dx;
+            if (chopCell.plant.chopCount <= 0) {
               seedCount += 2;
-              delete chopCell.chopCount;
               delete chopCell.plant;
               generateMiniMap();
             }
@@ -370,11 +370,12 @@ window.Chem.onReady(function () {
         }
         if (cell.plant) {
           var plantImg = plantTypes[cell.plant.type].image;
-          if (cell.chopCount) {
+          if (cell.plant.chopCount) {
             context.drawImage(plantImg, 0, 0,
-                plantImg.width, plantImg.height * cell.chopCount, pos.x, pos.y,
-                plantImg.width, plantImg.height * cell.chopCount);
+                plantImg.width, plantImg.height * cell.plant.chopCount, pos.x, pos.y,
+                plantImg.width, plantImg.height * cell.plant.chopCount);
           } else if (cell.plant.growing) {
+            context.drawImage(saplingImage, pos.x, pos.y);
             var h = plantImg.height * (1 - cell.plant.growing);
             if (h < 1) h = 1;
             context.drawImage(plantImg, 0, 0,
@@ -514,7 +515,7 @@ window.Chem.onReady(function () {
     }
   }
 
-  function commandToPlantSapling(member, pos) {
+  function commandToPlantShrub(member, pos) {
     var posFloored = pos.floored();
     var cell = grid[posFloored.y][posFloored.x];
     if (cell.terrain === landType.safe || cell.terrain === landType.danger) {
@@ -522,7 +523,7 @@ window.Chem.onReady(function () {
         name: 'plant',
         pos: posFloored,
         state: 'off',
-        plantType: 'sapling',
+        plantType: 'shrub',
       });
     }
   }
@@ -653,7 +654,7 @@ window.Chem.onReady(function () {
         var cell = grid[y][x];
         if (cell.terrain === landType.treeAdult) {
           cell.plant = {
-            type: 'sapling',
+            type: 'shrub',
           };
           cell.terrain = landType.safe;
         }
@@ -834,7 +835,7 @@ window.Chem.onReady(function () {
     for (y = startPos.y - 1; y < startPos.y + 1; ++y) {
       for (x = startPos.x - 1; x < startPos.x + 1; ++x) {
         grid[y][x].plant = {
-          type: 'sapling',
+          type: 'shrub',
         };
       }
     }

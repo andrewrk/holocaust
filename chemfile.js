@@ -49,6 +49,9 @@ exports.spritesheet = {
     sapling: {
       anchor: 'topleft',
     },
+    shrub: {
+      anchor: 'topleft',
+    },
     saplingbutton: {
       anchor: 'topleft',
     },
