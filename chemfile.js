@@ -17,11 +17,11 @@ exports.spritesheet = {
   animations: {
     lady: {
       anchor: 'bottom',
-      frames: 'lady00.png',
+      frames: 'lady/lady00.png',
     },
     man: {
       anchor: 'bottom',
-      frames: 'man00.png',
+      frames: 'man/man00.png',
     },
     ladydie: {
       anchor: 'bottom',
@@ -49,11 +49,16 @@ exports.spritesheet = {
     danger: {
       anchor: 'topleft',
     },
+    growing: {
+      anchor: 'topleft',
+    },
     sapling: {
       anchor: 'topleft',
+      frames: ['growing/growing10.png'],
     },
     shrub: {
       anchor: 'topleft',
+      frames: ['growing/growing18.png'],
     },
     saplingbutton: {
       anchor: 'topleft',

@@ -22,6 +22,7 @@ window.Chem.onReady(function () {
   var saplingImage = Chem.getImage('sapling');
   var shrubImage = Chem.getImage('shrub');
   var axeImage = Chem.getImage('axe');
+  var growingAnimation = Chem.animations.growing;
   var plantTypes = {
     shrub: {
       image: shrubImage,
@@ -439,12 +440,10 @@ window.Chem.onReady(function () {
                 plantImg.width, plantImg.height * cell.plant.chopCount, pos.x, pos.y,
                 plantImg.width, plantImg.height * cell.plant.chopCount);
           } else if (cell.plant.growing) {
-            context.drawImage(saplingImage, pos.x, pos.y);
-            var h = plantImg.height * (1 - cell.plant.growing);
-            if (h < 1) h = 1;
-            context.drawImage(plantImg, 0, 0,
-                plantImg.width, h, pos.x, pos.y,
-                plantImg.width, h);
+            var index = Math.floor((1 - cell.plant.growing) * growingAnimation.frames.length);
+            var frame = growingAnimation.frames[index];
+            context.drawImage(Chem.spritesheet, frame.pos.x, frame.pos.y, frame.size.x, frame.size.y,
+                pos.x, pos.y, frame.size.x, frame.size.y);
           } else {
             context.drawImage(plantImg, pos.x, pos.y);
           }
