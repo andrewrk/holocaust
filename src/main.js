@@ -482,7 +482,10 @@ window.Chem.onReady(function () {
       if (inGrid(mouseCellPos)) {
         var mouseCell = grid[mouseCellPos.y][mouseCellPos.x];
         var screenMouseCellPos = toScreen(mouseCellPos);
-        var img = mouseCell.plant ? axeImage : crewOptions[selectedCrewOption].image;
+        var img = crewOptions[selectedCrewOption].image;
+        if (selectedCrewOption === 0) {
+          if (mouseCell.plant) img = axeImage;
+        }
         context.drawImage(img, screenMouseCellPos.x, screenMouseCellPos.y);
       }
     }
