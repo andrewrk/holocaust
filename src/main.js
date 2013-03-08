@@ -294,7 +294,6 @@ window.Chem.onReady(function () {
     var count = 0;
     for (var y = -1; y <= 1; ++y) {
       for (var x = -1; x <= 1; ++x) {
-        if (x === 0 && y === 0) continue;
         var thisPt = pt.offset(x, y);
         var thisCell = grid[thisPt.y][thisPt.x];
         if (matchFn(thisCell)) count += 1;
@@ -1016,7 +1015,7 @@ window.Chem.onReady(function () {
         }
         var cell = grid[pt.y][pt.x];
         var terrain = cell.terrain;
-        if ((!extraWalkableCells || !extraWalkableCells(cell)) && (cell.entity || cell.plant || cell.walkable ||
+        if ((!extraWalkableCells || !extraWalkableCells(cell)) && (cell.entity || cell.plant || !terrain.walkable ||
             (unsafe && (terrain === landType.fatal)) || (!unsafe && !terrain.safe)))
         {
           return false;
