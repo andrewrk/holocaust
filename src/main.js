@@ -16,9 +16,10 @@ window.Chem.onReady(function () {
   var crew = {};
   var crewLosRadius = 4;
   var crewChopRadius = 1.6;
-  var entityAttackRadius = 0.5;
+  var entityAttackRadius = 0.8;
   var crewMaxSpeed = 0.1;
   var mutantMaxSpeed = 0.05;
+  var mutantHurtAmt = 0.0025;
   var saplingImage = Chem.getImage('sapling');
   var shrubImage = Chem.getImage('shrub');
   var axeImage = Chem.getImage('axe');
@@ -202,6 +203,11 @@ window.Chem.onReady(function () {
       newPos = mutant.pos.plus(vel);
       updateEntityPos(mutant, newPos);
 
+      var attackTarget = mutant.inputs.attack;
+      if (attackTarget && attackTarget.pos.distanceTo(mutant.pos) <= entityAttackRadius) {
+        changeEntityHealth(attackTarget, -mutantHurtAmt * dx);
+      }
+
       // mutant AI
       if (mutant.task) {
         tasks[mutant.task.name](mutant);
@@ -227,14 +233,11 @@ window.Chem.onReady(function () {
       var cell = grid[loc.y][loc.x];
       var terrain = cell.terrain;
       if (terrain === landType.danger) {
-        member.health -= 0.005 * dx;
+        changeEntityHealth(member, -0.005 * dx);
       } else if (terrain === landType.fatal) {
-        member.health = 0;
+        changeEntityHealth(member, -1);
       }
-      if (member.health <= 0) {
-        die(member);
-        return;
-      }
+      if (member.deleted) continue;
 
       // explore areas around crew members
       for (var y = -crewLosRadius; y < crewLosRadius; ++y) {
@@ -289,6 +292,13 @@ window.Chem.onReady(function () {
 
       // crew member AI
       if (member.task) tasks[member.task.name](member);
+    }
+  }
+
+  function changeEntityHealth(entity, delta) {
+    entity.health += delta;
+    if (entity.health <= 0) {
+      die(entity);
     }
   }
 
