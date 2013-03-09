@@ -8,6 +8,6 @@
   "author": "Andrew Kelley <superjoe30@gmail.com>",
   "license": "BSD",
   "dependencies": {
-    "chem": "~0.2.5"
+    "chem": "~0.2.6"
   }
 }
