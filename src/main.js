@@ -12,13 +12,13 @@ window.Chem.onReady(function () {
 
   var lastId = 0;
   var cellSize = v(6, 6);
-  var gridWidth = Math.floor(canvas.width / cellSize.x);
-  var gridHeight = Math.floor(canvas.height / cellSize.y);
-  var gridSize = v(gridWidth, gridHeight);
+  var gridSize = engine.size.divBy(cellSize).floor()
   var crew = {};
   var crewLosRadius = 4;
   var crewChopRadius = 1.6;
+  var entityAttackRadius = 0.5;
   var crewMaxSpeed = 0.1;
+  var mutantMaxSpeed = 0.05;
   var saplingImage = Chem.getImage('sapling');
   var shrubImage = Chem.getImage('shrub');
   var axeImage = Chem.getImage('axe');
@@ -38,6 +38,7 @@ window.Chem.onReady(function () {
       texture: Chem.getImage('dirt'),
       walkable: true,
       plantable: true,
+      spawnable: false,
     },
     fatal: {
       name: "Fatal",
@@ -45,6 +46,7 @@ window.Chem.onReady(function () {
       texture: Chem.getImage('danger'),
       walkable: true,
       plantable: false,
+      spawnable: true,
     },
     oxygenated: {
       name: "Oxygenated Land",
@@ -52,6 +54,7 @@ window.Chem.onReady(function () {
       texture: Chem.getImage('oxygendirt'),
       walkable: true,
       plantable: true,
+      spawnable: false,
     },
     danger: {
       name: "Danger",
@@ -59,6 +62,7 @@ window.Chem.onReady(function () {
       texture: Chem.getImage('dirtno2'),
       walkable: true,
       plantable: true,
+      spawnable: true,
     },
     cleanWater: {
       name: "Clean Water",
@@ -66,6 +70,7 @@ window.Chem.onReady(function () {
       texture: Chem.getImage('water'),
       walkable: false,
       plantable: false,
+      spawnable: false,
     },
     contaminatedWater: {
       name: "Contaminated Water",
@@ -73,6 +78,7 @@ window.Chem.onReady(function () {
       texture: Chem.getImage('evilwater'),
       walkable: false,
       plantable: false,
+      spawnable: false,
     },
   };
   var crewOptions = [
@@ -95,6 +101,7 @@ window.Chem.onReady(function () {
     walk: performWalkTask,
     chop: performChopTask,
     plant: performPlantTask,
+    attack: performAttackTask,
   };
 
   var grid = gridFromPerlinNoise();
@@ -114,6 +121,9 @@ window.Chem.onReady(function () {
   var anyCrewSelected = false;
   var selectedCrewOption = 0;
   var growingPlants = {};
+  var mutants = {};
+  var mutantSpawnInterval = 1000;
+  var nextMutantSpawn = 0;
 
   createSafeStartArea();
   generateTerrainTextures();
@@ -174,6 +184,35 @@ window.Chem.onReady(function () {
         delete plant.growing;
         delete growingPlants[id];
         plantFinishGrowing(plant);
+      }
+    }
+
+    nextMutantSpawn -= dx;
+    if (nextMutantSpawn <= 0) {
+      nextMutantSpawn = mutantSpawnInterval;
+      spawnMutant();
+    }
+
+    var vel, newPos;
+    for (id in mutants) {
+      var mutant = mutants[id];
+
+      // mutant physics
+      vel = mutant.inputs.direction.scaled(mutant.inputs.speed * dx);
+      newPos = mutant.pos.plus(vel);
+      updateEntityPos(mutant, newPos);
+
+      // mutant AI
+      if (mutant.task) {
+        tasks[mutant.task.name](mutant);
+      } else {
+        // pick a random crew member to harass
+        var randomCrewId = pickNRandomProps(crew, 1)[0];
+        assignTask(mutant, {
+          name: 'attack',
+          state: 'off',
+          target: crew[randomCrewId],
+        });
       }
     }
 
@@ -243,14 +282,55 @@ window.Chem.onReady(function () {
       }
 
       // crew member physics
-      var vel = member.inputs.direction.scaled(member.inputs.speed * dx);
-      var newPos = member.pos.plus(vel);
-      updateCrewPos(member, newPos);
+      vel = member.inputs.direction.scaled(member.inputs.speed * dx);
+      newPos = member.pos.plus(vel);
+      updateEntityPos(member, newPos);
 
 
       // crew member AI
       if (member.task) tasks[member.task.name](member);
     }
+  }
+
+  function spawnMutant() {
+    var start = gridSize.times(v(Math.random(), Math.random())).floor();
+    var it = start.clone();
+    // iterate until we find a spawnable cell or end up back at start
+    while(true) {
+      var cell = grid[it.y][it.x];
+      if (cell.terrain.spawnable && ! cell.plant && ! cell.entity) {
+        spawnMutantAt(cell);
+        return;
+      }
+      it.x += 1;
+      if (it.x >= gridSize.x) {
+        it.x = 0;
+        it.y += 1;
+        if (it.y >= gridSize.y) {
+          it.y = 0;
+        }
+      }
+      // all dangerous land eradicated
+      if (it.equals(start)) return;
+    }
+  }
+
+  function spawnMutantAt(cell) {
+    var graphic = Math.floor(Math.random() * 2) ? 'manmutant' : 'ladymutant';
+    var mutant = {
+      id: nextId(),
+      graphic: graphic,
+      name: 'Mutant',
+      health: 1,
+      pos: cell.pos.offset(0.5, 0.5),
+      inputs: {
+        direction: v(1, 0),
+        speed: 0,
+      },
+      sprite: new Chem.Sprite(graphic, { batch: batch, }),
+    };
+    cell.entity = mutant;
+    mutants[mutant.id] = mutant;
   }
 
   function plantFinishGrowing(plant) {
@@ -303,19 +383,36 @@ window.Chem.onReady(function () {
     return count;
   }
 
-  function updateCrewPos(member, newPos) {
+  function updateEntityPos(entity, newPos) {
     var newPosFloored = newPos.floored();
-    var oldPos = member.pos.floored();
+    var oldPos = entity.pos.floored();
     var cell = grid[oldPos.y][oldPos.x];
-    if (! newPosFloored.equals(member.pos.floored())) {
+    if (! newPosFloored.equals(oldPos)) {
       var newCell = grid[newPosFloored.y][newPosFloored.x];
       if (newCell.entity == null && newCell.terrain.walkable && !newCell.plant) {
         cell.entity = null;
-        member.pos = newPos;
-        newCell.entity = member;
+        entity.pos = newPos;
+        newCell.entity = entity;
       }
     } else {
-      member.pos = newPos;
+      entity.pos = newPos;
+    }
+  }
+
+  function performAttackTask(entity) {
+    if (entity.task.target.deleted) {
+      // task complete
+      entity.task = null;
+      entity.inputs.attack = null;
+      entity.inputs.speed = 0;
+      return;
+    }
+    entity.inputs.attack = entity.task.target;
+    entity.inputs.direction = entity.task.target.pos.minus(entity.pos).normalize();
+    if (entity.pos.distanceTo(entity.task.target.pos) > entityAttackRadius) {
+      entity.inputs.speed = mutantMaxSpeed;
+    } else {
+      entity.inputs.speed = 0;
     }
   }
 
@@ -384,7 +481,7 @@ window.Chem.onReady(function () {
       member.task.path.shift();
       if (member.task.path.length === 0) {
         // done following path
-        updateCrewPos(member, nextNode);
+        updateEntityPos(member, nextNode);
         member.task.state = 'off';
         member.inputs.speed = 0;
       }
@@ -417,8 +514,8 @@ window.Chem.onReady(function () {
     var end = fromScreen(engine.size).ceil();
     if (start.x < 0) start.x = 0;
     if (start.y < 0) start.y = 0;
-    if (end.x >= gridWidth) end.x = gridWidth - 1;
-    if (end.y >= gridHeight) end.y = gridHeight - 1;
+    if (end.x >= gridSize.x) end.x = gridSize.x - 1;
+    if (end.y >= gridSize.y) end.y = gridSize.y - 1;
     var it = v();
     var size = sizeToScreen(v(1, 1));
     for (it.y = start.y; it.y < end.y; it.y += 1) {
@@ -455,6 +552,10 @@ window.Chem.onReady(function () {
     for (id in crew) {
       member = crew[id]
       member.sprite.pos = toScreen(member.pos);
+    }
+    for (id in mutants) {
+      var mutant = mutants[id];
+      mutant.sprite.pos = toScreen(mutant.pos);
     }
     engine.draw(batch);
 
@@ -596,6 +697,8 @@ window.Chem.onReady(function () {
 
   function assignTask(member, task) {
     member.inputs.chop = null;
+    member.inputs.plant = null;
+    member.inputs.attack = null;
     member.inputs.speed = 0;
     member.task = task;
   }
@@ -626,6 +729,7 @@ window.Chem.onReady(function () {
   }
 
   function die(crewMember) {
+    crewMember.deleted = true; // for lingering references
     crewMember.sprite.setAnimationName(crewMember.graphic + 'die');
     crewMember.sprite.setFrameIndex(0);
     crewMember.sprite.on('animation_end', function() {
@@ -665,7 +769,6 @@ window.Chem.onReady(function () {
       },
       sprite: new Chem.Sprite(graphic, {
         batch: batch,
-        pos: pos.times(cellSize),
       }),
     };
     grid[pos.y][pos.x].entity = crew[id];
@@ -691,18 +794,18 @@ window.Chem.onReady(function () {
       },
     ];
 
-    var perlinNoise = generatePerlinNoise(gridWidth, gridHeight);
+    var perlinNoise = generatePerlinNoise(gridSize.x, gridSize.y);
     var sum = 0;
     terrainThresholds.forEach(function(item) {
       sum += item.weight;
       item.threshold = sum;
     });
-    var grid = createArray(gridWidth, gridHeight);
+    var grid = createArray(gridSize.x, gridSize.y);
     var x;
-    for (var y = 0; y < gridHeight; ++y) {
+    for (var y = 0; y < gridSize.y; ++y) {
       var gridRow = grid[y];
       var perlinRow = perlinNoise[y];
-      for (x = 0; x < gridWidth; ++x) {
+      for (x = 0; x < gridSize.x; ++x) {
         // just in case the weights don't add up to 1
         gridRow[x] = {terrain: landType.safe};
         for (var i = 0; i < terrainThresholds.length; ++i) {
@@ -719,9 +822,10 @@ window.Chem.onReady(function () {
       waterCount += addRiver();
     }
     // convert trees to plants
-    for (y = 0; y < gridHeight; ++y) {
-      for (x = 0; x < gridWidth; ++x) {
+    for (y = 0; y < gridSize.y; ++y) {
+      for (x = 0; x < gridSize.x; ++x) {
         var cell = grid[y][x];
+        cell.pos = v(x, y);
         if (cell.terrain === landType.treeAdult) {
           cell.plant = {
             type: 'shrub',
@@ -736,11 +840,11 @@ window.Chem.onReady(function () {
       var count = 0;
       var it = v(Math.random() * gridSize.x, 0).floor();
       var itRadius = Math.floor(Math.random() * 5) + 2;
-      while(it.y < gridHeight) {
+      while(it.y < gridSize.y) {
         if (itRadius < 1) itRadius = 1;
         if (itRadius > 10) itRadius = 10;
         for (x = it.x - itRadius; x < it.x + itRadius; ++x) {
-          if (x < 0 || x >= gridWidth) continue;
+          if (x < 0 || x >= gridSize.x) continue;
           grid[it.y][x].terrain = waterizeTerrain(grid[it.y][x].terrain);
           count += 1;
         }
@@ -769,7 +873,7 @@ window.Chem.onReady(function () {
     var octaveCount = options.octaveCount || 4;
     var amplitude = options.amplitude || 0.1;
     var persistence = options.persistence || 0.2;
-    var whiteNoise = generateWhiteNoise(gridWidth, gridHeight);
+    var whiteNoise = generateWhiteNoise(gridSize.x, gridSize.y);
 
     var smoothNoiseList = new Array(octaveCount);
     var i, y, x, row;
@@ -896,7 +1000,7 @@ window.Chem.onReady(function () {
   function createSafeStartArea() {
     // make a safe area to start out on
     var startSize = v(4, 4);
-    var startPos = v(gridWidth / 2, gridHeight / 2).floor();
+    var startPos = gridSize.scaled(0.5).floor();
     var x, y;
     for (y = startPos.y - startSize.y; y < startPos.y + startSize.y; ++y) {
       for (x = startPos.x - startSize.x; x < startPos.x + startSize.x; ++x) {
@@ -1032,6 +1136,18 @@ window.Chem.onReady(function () {
   }
   function nextId() {
     return "" + lastId++;
+  }
+  function pickNRandomProps(obj, n) {
+    var results = [];
+    if (n === 0) return results;
+    var count = 0
+    for (var prop in obj) {
+      count += 1;
+      for (var i = 0; i < n; ++i) {
+        if (Math.random() < 1 / count) results[i] = prop;
+      }
+    }
+    return results;
   }
 });
 

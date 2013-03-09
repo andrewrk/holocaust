@@ -31,6 +31,14 @@ exports.spritesheet = {
       anchor: 'bottom',
       frames: 'man',
     },
+    manmutant: {
+      anchor: 'bottom',
+      frames: 'mutantman',
+    },
+    ladymutant: {
+      anchor: 'bottom',
+      frames: 'mutantwoman',
+    },
     evilwater: {
       anchor: 'topleft',
     },
