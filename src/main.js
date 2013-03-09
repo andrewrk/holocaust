@@ -10,6 +10,7 @@ window.Chem.onReady(function () {
 
   engine.setSize(v(1067, 600));
 
+  var isEverythingExplored = false;
   var lastId = 0;
   var cellSize = v(6, 6);
   var gridSize = engine.size.divBy(cellSize).floor()
@@ -566,6 +567,7 @@ window.Chem.onReady(function () {
     for (id in mutants) {
       var mutant = mutants[id];
       mutant.sprite.pos = toScreen(mutant.pos);
+      mutant.sprite.alpha = visibilityAt(mutant.pos);
     }
     engine.draw(batch);
 
@@ -653,6 +655,7 @@ window.Chem.onReady(function () {
         grid[y][x].explored = true;
       }
     }
+    isEverythingExplored = true;
     updateMiniMap();
   }
   function inside(pos, start, size) {
@@ -731,6 +734,31 @@ window.Chem.onReady(function () {
   function explore(crewMember, pos) {
     grid[pos.y][pos.x].explored = true;
     updateMiniMap();
+  }
+
+  function distanceToNearestEntity(pos, entities) {
+    var min_distance = Infinity;
+    for (var id in entities) {
+      var entity = entities[id];
+      var distance = entity.pos.distanceTo(pos);
+      if (distance < min_distance)
+        min_distance = distance;
+    }
+    return min_distance;
+  }
+
+  function visibilityAt(pos) {
+    if (isEverythingExplored) return 1;
+    var distance = distanceToNearestEntity(pos, crew);
+    var fullVisibilityDistance = crewLosRadius;
+    if (distance < fullVisibilityDistance) return 1;
+    var zeroVisibilityDistance = crewLosRadius * 4;
+    if (distance > zeroVisibilityDistance) return 0;
+    var visibility = 1 - (distance - fullVisibilityDistance) / (zeroVisibilityDistance - fullVisibilityDistance);
+    // make it darker than a linear gradient
+    visibility *= visibility;
+    visibility *= visibility;
+    return visibility;
   }
 
   function updateMiniMap() {
