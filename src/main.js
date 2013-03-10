@@ -288,6 +288,7 @@ window.Chem.onReady(function () {
     var mutant = {
       id: nextId(),
       entities: mutants,
+      maxSpeed: mutantMaxSpeed,
       graphic: graphic,
       name: 'Mutant',
       health: 1,
@@ -377,11 +378,18 @@ window.Chem.onReady(function () {
       return;
     }
     entity.inputs.attack = entity.task.target;
-    entity.inputs.direction = entity.task.target.pos.minus(entity.pos).normalize();
-    if (entity.pos.distanceTo(entity.task.target.pos) > entityAttackRadius) {
-      entity.inputs.speed = mutantMaxSpeed;
-    } else {
-      entity.inputs.speed = 0;
+    if (entity.task.state === 'off') {
+      if (entity.pos.distanceTo(entity.task.target.pos) < entityAttackRadius) {
+        entity.task.state = 'attack';
+        entity.inputs.direction = entity.task.target.pos.minus(entity.pos).normalize();
+        entity.inputs.speed = entity.maxSpeed;
+      } else {
+        entity.task.path = computePath(entity.pos, entity.task.target.pos, entityAttackRadius);
+        entity.task.state = 'path';
+      }
+    }
+    if (entity.task.state === 'path') {
+      followPath(entity);
     }
   }
 
@@ -402,7 +410,7 @@ window.Chem.onReady(function () {
           type: member.task.plantType,
         };
       } else {
-        member.task.path = computePath(member, member.task.pos, 1);
+        member.task.path = computePath(member.pos, member.task.pos, 1);
         member.task.state = 'path';
       }
     }
@@ -417,7 +425,7 @@ window.Chem.onReady(function () {
         member.task.state = 'chop';
         member.inputs.chop = member.task.pos;
       } else {
-        member.task.path = computePath(member, member.task.pos, 1);
+        member.task.path = computePath(member.pos, member.task.pos, 1);
         member.task.state = 'path';
       }
     }
@@ -444,19 +452,19 @@ window.Chem.onReady(function () {
     }
   }
 
-  function followPath(member) {
-    var nextNode = member.task.path[0].offset(0.5, 0.5);
-    if (nextNode.distanceTo(member.pos) < crewMaxSpeed) {
-      member.task.path.shift();
-      if (member.task.path.length === 0) {
+  function followPath(entity) {
+    var nextNode = entity.task.path[0].offset(0.5, 0.5);
+    if (nextNode.distanceTo(entity.pos) < crewMaxSpeed) {
+      entity.task.path.shift();
+      if (entity.task.path.length === 0) {
         // done following path
-        updateEntityPos(member, nextNode);
-        member.task.state = 'off';
-        member.inputs.speed = 0;
+        updateEntityPos(entity, nextNode);
+        entity.task.state = 'off';
+        entity.inputs.speed = 0;
       }
     } else {
-      member.inputs.direction = nextNode.minus(member.pos).normalize();
-      member.inputs.speed = crewMaxSpeed;
+      entity.inputs.direction = nextNode.minus(entity.pos).normalize();
+      entity.inputs.speed = entity.maxSpeed;
     }
   }
 
@@ -467,7 +475,7 @@ window.Chem.onReady(function () {
         member.task = null;
         return;
       } else {
-        member.task.path = computePath(member, member.task.pos);
+        member.task.path = computePath(member.pos, member.task.pos);
         member.task.state = 'path';
       }
     }
@@ -768,6 +776,7 @@ window.Chem.onReady(function () {
     crew[id] = {
       id: id,
       entities: crew,
+      maxSpeed: crewMaxSpeed,
       graphic: graphic,
       name: name,
       health: 1,
@@ -784,25 +793,27 @@ window.Chem.onReady(function () {
   }
 
 
-  function computePath(member, dest, endRadius) {
-    endRadius = endRadius || 0.0000001;
+  function computePath(start, dest, endRadius) {
+    start = start.floored();
+    dest = dest.floored();
+    var isEnd = endRadius == null ? exactIsEnd : isEndFromRadius;
     // compute path
     var results = aStar({
-      start: member.pos.floored(),
-      isEnd: createIsEnd(),
+      start: start,
+      isEnd: isEnd,
       neighbor: createNeighborFn(),
       distance: pointDistance,
-      heuristic: createHeuristicFn(member),
+      heuristic: heuristic,
       timeout: 50,
     });
     if (results.path.length === 1) {
       // compute unsafe path
       results = aStar({
-        start: member.pos.floored(),
-        isEnd: createIsEnd(),
+        start: start,
+        isEnd: isEnd,
         neighbor: createNeighborFn({unsafe: true}),
         distance: pointDistance,
-        heuristic: createUnsafeHeuristicFn(member),
+        heuristic: unsafeHeuristic,
         timeout: 50,
       });
       if (results.path.length === 1) {
@@ -816,21 +827,21 @@ window.Chem.onReady(function () {
     }
     function createUnsafeHeuristicFn(member) {
       return function (node) {
-        var terrainAtNode = grid.cell(node).terrain;
-        var unsafePenalty = (terrainAtNode === Grid.terrains.danger) ? 100 : 0;
-        return node.distanceTo(member.task.pos) + unsafePenalty;
       };
     }
-    function createHeuristicFn(member) {
-      return function (node) {
-        return node.distanceTo(member.task.pos);
-      };
+    function unsafeHeuristic(node) {
+      var terrainAtNode = grid.cell(node).terrain;
+      var unsafePenalty = terrainAtNode.damage * -200;
+      return node.distanceTo(dest) + unsafePenalty;
     }
-    function createIsEnd() {
-      var end = dest.floored();
-      return function(node) {
-        return node.distanceTo(end) <= endRadius;
-      };
+    function heuristic(node) {
+      return node.distanceTo(dest);
+    }
+    function exactIsEnd(node) {
+      return node.equals(dest);
+    }
+    function isEndFromRadius(node) {
+      return node.distanceTo(dest) <= endRadius;
     }
   }
 
