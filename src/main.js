@@ -204,10 +204,18 @@ window.Chem.onReady(function () {
       newPos = mutant.pos.plus(vel);
       updateEntityPos(mutant, newPos);
 
-      // get hurt by happy nature land
+      // mutant health updates
       var loc = mutant.pos.floored();
-      if (grid[loc.y][loc.x].terrain === landType.safe) {
+      var terrain = grid[loc.y][loc.x].terrain;
+      if (terrain === landType.safe) {
+        // get hurt by happy nature land
         changeEntityHealth(mutant, -0.0005 * dx);
+      } else if (terrain === landType.danger) {
+        // heal from danger zone
+        changeEntityHealth(mutant, 0.005 * dx);
+      } else if (terrain === landType.fatal) {
+        // full heal from death zone
+        changeEntityHealth(mutant, 1);
       }
 
       var attackTarget = mutant.inputs.attack;
@@ -306,6 +314,8 @@ window.Chem.onReady(function () {
     entity.health += delta;
     if (entity.health <= 0) {
       die(entity);
+    } else if (entity.health > 1) {
+      entity.health = 1;
     }
   }
 
@@ -578,22 +588,34 @@ window.Chem.onReady(function () {
     }
     engine.draw(batch);
 
-    // draw crew names and health
-    // but only if selected
+    // draw names and health
+    context.save();
     context.textAlign = 'center';
     var healthBarSize = v(32, 4);
-    for (id in crew) {
-      member = crew[id];
-      if (!member.selected) continue;
-      context.fillStyle = '#ffffff';
-      context.fillText(member.name,
-          member.sprite.pos.x, member.sprite.pos.y - member.sprite.size.y - 5);
-      start = member.sprite.pos.minus(healthBarSize.scaled(0.5)).floor();
+    function drawEntityHealth(entity) {
+      context.globalAlpha = 0.8 * entity.sprite.alpha;
+      var start = entity.sprite.pos.minus(healthBarSize.scaled(0.5)).floor();
       context.fillStyle = '#000000';
-      context.fillRect(start.x - 1, start.y - member.sprite.size.y - 1, healthBarSize.x + 2, healthBarSize.y + 2);
+      context.fillRect(start.x - 1, start.y - entity.sprite.size.y - 1, healthBarSize.x + 2, healthBarSize.y + 2);
       context.fillStyle = '#009413';
-      context.fillRect(start.x, start.y - member.sprite.size.y, healthBarSize.x * member.health, healthBarSize.y);
+      context.fillRect(start.x, start.y - entity.sprite.size.y, healthBarSize.x * entity.health, healthBarSize.y);
     }
+    function drawEntities(entities) {
+      for (id in entities) {
+        var entity = entities[id];
+        if (entity.selected) {
+          context.fillStyle = '#ffffff';
+          context.fillText(entity.name,
+              entity.sprite.pos.x, entity.sprite.pos.y - entity.sprite.size.y - 5);
+        }
+        if (entity.selected || entity.health != 1) {
+          drawEntityHealth(entity);
+        }
+      }
+    }
+    drawEntities(crew);
+    drawEntities(mutants);
+    context.restore();
 
     // highlight the square you're mouse overing
     if (anyCrewSelected) {
