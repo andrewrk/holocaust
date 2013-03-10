@@ -97,6 +97,8 @@ window.Chem.onReady(function () {
       // cheatz!!
       if (button === Chem.Button.Key_E) {
         setEverythingExplored();
+      } else if (button === Chem.Button.Key_S) {
+        spawnMutantAt(grid.cell(fromScreen(engine.mouse_pos).floored()));
       }
     }
 
@@ -220,6 +222,7 @@ window.Chem.onReady(function () {
 
       function onAttack(attackTarget) {
         if (attackTarget.pos.distanceTo(entity.pos) <= entityAttackRadius) {
+          onEntityAttacked(attackTarget, entity);
           changeEntityHealth(attackTarget, -entity.attackAmt * dx);
         }
       }
@@ -249,6 +252,27 @@ window.Chem.onReady(function () {
           }
         }
       }
+    }
+  }
+
+  function onEntityAttacked(entity, attacker) {
+    // possibly defend
+    var task = entity.tasks[0];
+    var defendTask = {
+      name: 'attack',
+      target: attacker,
+      state: 'off',
+    };
+    if (task) {
+      if (task.name !== 'attack') {
+        // pause current task
+        stopCurrentTask(entity);
+        task.state = 'off';
+        entity.tasks.unshift(task);
+        entity.tasks.unshift(defendTask);
+      }
+    } else {
+      assignTask(entity, false, defendTask);
     }
   }
 
