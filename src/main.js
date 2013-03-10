@@ -71,6 +71,7 @@ window.Chem.onReady(function () {
   var anyCrewSelected = false;
   var selectedCrewOption = 0;
   var growingPlants = {};
+  var partiallyChoppedPlants = {};
   var mutants = {};
   var mutantSpawnInterval = 1000;
   var nextMutantSpawn = 0;
@@ -133,6 +134,14 @@ window.Chem.onReady(function () {
         plant.growing = null;
         delete growingPlants[id];
         plantFinishGrowing(plant);
+      }
+    }
+    for (id in partiallyChoppedPlants) {
+      plant = partiallyChoppedPlants[id];
+      plant.chopCount += 0.0008 * dx;
+      if (plant.chopCount >= 1) {
+        plant.chopCount = null;
+        delete partiallyChoppedPlants[id];
       }
     }
 
@@ -210,10 +219,12 @@ window.Chem.onReady(function () {
           plant = chopCell.plant;
           if (plant && (! plant.growing)) {
             plant.chopCount = plant.chopCount || 1;
-            plant.chopCount -= 0.008 * dx;
+            plant.chopCount -= 0.0088 * dx;
             if (plant.chopCount <= 0) {
               chopCell.plant = null;
               plantDestroyed(plant);
+            } else {
+              partiallyChoppedPlants[plant.id] = plant;
             }
           }
         }
