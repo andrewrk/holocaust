@@ -30,7 +30,7 @@ window.Chem.onReady(function () {
       plantable: false,
       spawnable: true,
       damage: -1,
-      mutantDamage: 1,
+      mutantDamage: 0,
     },
     oxygenated: {
       name: "Oxygenated Land",
@@ -50,7 +50,7 @@ window.Chem.onReady(function () {
       plantable: true,
       spawnable: true,
       damage: -0.005,
-      mutantDamage: 0.005,
+      mutantDamage: 0,
     },
     cleanWater: {
       name: "Clean Water",
