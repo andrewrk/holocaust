@@ -80,6 +80,9 @@ exports.spritesheet = {
     axe: {
       anchor: 'topleft',
     },
+    sword: {
+      anchor: 'topleft',
+    },
     tree: {
       anchor: 'topleft',
     },

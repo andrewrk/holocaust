@@ -24,6 +24,7 @@ window.Chem.onReady(function () {
   var saplingImage = Chem.getImage('sapling');
   var shrubImage = Chem.getImage('shrub');
   var axeImage = Chem.getImage('axe');
+  var swordImage = Chem.getImage('sword');
   var growingAnimation = Chem.animations.growing;
   var plantTypes = {
     shrub: {
@@ -566,7 +567,11 @@ window.Chem.onReady(function () {
         var screenMouseCellPos = toScreen(mouseCellPos);
         var img = crewOptions[selectedCrewOption].image;
         if (selectedCrewOption === 0) {
-          if (mouseCell.plant) img = axeImage;
+          if (mouseCell.plant) {
+            img = axeImage;
+          } else if (mouseCell.entity && !mouseCell.entity.human) {
+            img = swordImage;
+          }
         }
         context.drawImage(img, screenMouseCellPos.x, screenMouseCellPos.y);
       }
@@ -656,6 +661,12 @@ window.Chem.onReady(function () {
       assignTask(member, queue, {
         name: 'chop',
         pos: posFloored,
+        state: 'off',
+      });
+    } else if (cell.entity && !cell.entity.human) {
+      assignTask(member, queue, {
+        name: 'attack',
+        target: cell.entity,
         state: 'off',
       });
     } else if (cell.terrain.walkable) {
