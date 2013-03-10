@@ -21,7 +21,6 @@ window.Chem.onReady(function () {
   var entityAttackRadius = 0.8;
   var crewMaxSpeed = 0.1;
   var mutantMaxSpeed = 0.05;
-  var mutantHurtAmt = 0.0025;
   var saplingImage = Chem.getImage('sapling');
   var shrubImage = Chem.getImage('shrub');
   var axeImage = Chem.getImage('axe');
@@ -151,70 +150,80 @@ window.Chem.onReady(function () {
       spawnMutant();
     }
 
-    var vel, newPos, terrain;
+    // compute anyCrewSelected
+    anyCrewSelected = false;
+    for (id in crew) {
+      anyCrewSelected = anyCrewSelected || crew[id].selected;
+    }
+
     for (id in mutants) {
-      var mutant = mutants[id];
+      onEntityUpdate(mutants[id]);
+    }
 
-      // mutant physics
-      vel = mutant.inputs.direction.scaled(mutant.inputs.speed * dx);
-      newPos = mutant.pos.plus(vel);
-      updateEntityPos(mutant, newPos);
+    for (id in crew) {
+      onEntityUpdate(crew[id]);
+    }
 
-      // mutant health updates
-      terrain = grid.cell(mutant.pos.floored()).terrain;
-      changeEntityHealth(mutant, dx * terrain.mutantDamage);
+    function onEntityUpdate(entity) {
+      // physics
+      var vel = entity.inputs.direction.scaled(entity.inputs.speed * dx);
+      var newPos = entity.pos.plus(vel);
+      updateEntityPos(entity, newPos);
 
-      var attackTarget = mutant.inputs.attack;
-      if (attackTarget && attackTarget.pos.distanceTo(mutant.pos) <= entityAttackRadius) {
-        changeEntityHealth(attackTarget, -mutantHurtAmt * dx);
+      // health updates
+      var loc = entity.pos.floored();
+      var cell = grid.cell(loc);
+      var terrain = cell.terrain;
+      var damage = entity.human ? terrain.damage : terrain.mutantDamage;
+      changeEntityHealth(entity, damage * dx);
+      if (entity.deleted) return;
+
+      if (entity.human) {
+        // explore areas around crew members
+        for (var y = -crewLosRadius; y < crewLosRadius; ++y) {
+          for (var x = -crewLosRadius; x < crewLosRadius; ++x) {
+            var targetPos = loc.offset(x, y);
+            if (! inGrid(targetPos)) continue;
+            if (targetPos.distanceTo(entity.pos) <= crewLosRadius) {
+              if (!grid.cell(targetPos).explored) {
+                explore(entity, targetPos);
+              }
+            }
+          }
+        }
       }
 
-      // mutant AI
-      if (mutant.tasks[0]) {
-        taskFns[mutant.tasks[0].name](mutant);
-      } else {
+      // inputs
+      if (entity.inputs.attack) {
+        onAttack(entity.inputs.attack);
+      } else if (entity.inputs.chop) {
+        onChop(entity.inputs.chop);
+      } else if (entity.inputs.plant) {
+        onPlant(entity.inputs.plant);
+      }
+
+      // AI
+      if (entity.tasks[0]) {
+        taskFns[entity.tasks[0].name](entity);
+      } else if (!entity.human) {
         // pick a random crew member to harass
         var randomCrewId = pickNRandomProps(crew, 1)[0];
         if (randomCrewId) {
-          assignTask(mutant, false, {
+          assignTask(entity, false, {
             name: 'attack',
             state: 'off',
             target: crew[randomCrewId],
           });
         }
       }
-    }
 
-    anyCrewSelected = false;
-    for (id in crew) {
-      var member = crew[id];
-
-      anyCrewSelected = anyCrewSelected || member.selected;
-
-      // get hurt by dangerous land
-      var loc = member.pos.floored();
-      var cell = grid.cell(loc);
-      terrain = cell.terrain;
-      var damage = terrain.damage || 0;
-      changeEntityHealth(member, damage * dx);
-      if (member.deleted) continue;
-
-      // explore areas around crew members
-      for (var y = -crewLosRadius; y < crewLosRadius; ++y) {
-        for (var x = -crewLosRadius; x < crewLosRadius; ++x) {
-          var targetPos = loc.offset(x, y);
-          if (! inGrid(targetPos)) continue;
-          if (targetPos.distanceTo(member.pos) <= crewLosRadius) {
-            if (!grid.cell(targetPos).explored) {
-              explore(member, targetPos);
-            }
-          }
+      function onAttack(attackTarget) {
+        if (attackTarget.pos.distanceTo(entity.pos) <= entityAttackRadius) {
+          changeEntityHealth(attackTarget, -entity.attackAmt * dx);
         }
       }
-
-      if (member.inputs.chop) {
-        var chopPos = member.inputs.chop;
-        if (chopPos.distanceTo(member.pos) <= crewChopRadius) {
+      function onChop(chopPos) {
+        if (chopPos.distanceTo(entity.pos) <= crewChopRadius) {
           var chopCell = grid.cell(chopPos);
           plant = chopCell.plant;
           if (plant && (! plant.growing)) {
@@ -228,26 +237,17 @@ window.Chem.onReady(function () {
             }
           }
         }
-      } else if (member.inputs.plant) {
-        var plantPos = member.inputs.plant.pos;
-        if (plantPos.distanceTo(member.pos) <= crewChopRadius) {
-          var plantCell = grid.cell(plantPos);
+      }
+      function onPlant(plantInput) {
+        if (plantInput.pos.distanceTo(entity.pos) <= crewChopRadius) {
+          var plantCell = grid.cell(plantInput.pos);
           if (plantCell.terrain.plantable && seedCount > 0 && !plantCell.plant) {
-            plantCell.setGrowingPlant(member.inputs.plant.type);
+            plantCell.setGrowingPlant(plantInput.type);
             growingPlants[plantCell.plant.id] = plantCell.plant;
             seedCount -= 1;
           }
         }
       }
-
-      // crew member physics
-      vel = member.inputs.direction.scaled(member.inputs.speed * dx);
-      newPos = member.pos.plus(vel);
-      updateEntityPos(member, newPos);
-
-
-      // crew member AI
-      if (member.tasks[0]) taskFns[member.tasks[0].name](member);
     }
   }
 
@@ -289,6 +289,7 @@ window.Chem.onReady(function () {
       id: nextId(),
       entities: mutants,
       maxSpeed: mutantMaxSpeed,
+      attackAmt: 0.0025,
       graphic: graphic,
       name: 'Mutant',
       health: 1,
@@ -778,9 +779,11 @@ window.Chem.onReady(function () {
       id: id,
       entities: crew,
       maxSpeed: crewMaxSpeed,
+      attackAmt: 0.005,
       graphic: graphic,
       name: name,
       health: 1,
+      human: true,
       pos: pos.offset(0.5, 0.5),
       inputs: {
         direction: v(1, 0),
