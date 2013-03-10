@@ -47,7 +47,7 @@ window.Chem.onReady(function () {
       image: shrubImage,
     },
   ];
-  var tasks = {
+  var taskFns = {
     walk: performWalkTask,
     chop: performChopTask,
     plant: performPlantTask,
@@ -170,13 +170,13 @@ window.Chem.onReady(function () {
       }
 
       // mutant AI
-      if (mutant.task) {
-        tasks[mutant.task.name](mutant);
+      if (mutant.tasks[0]) {
+        taskFns[mutant.tasks[0].name](mutant);
       } else {
         // pick a random crew member to harass
         var randomCrewId = pickNRandomProps(crew, 1)[0];
         if (randomCrewId) {
-          assignTask(mutant, {
+          assignTask(mutant, false, {
             name: 'attack',
             state: 'off',
             target: crew[randomCrewId],
@@ -247,7 +247,7 @@ window.Chem.onReady(function () {
 
 
       // crew member AI
-      if (member.task) tasks[member.task.name](member);
+      if (member.tasks[0]) taskFns[member.tasks[0].name](member);
     }
   }
 
@@ -298,6 +298,7 @@ window.Chem.onReady(function () {
         speed: 0,
       },
       sprite: new Chem.Sprite(graphic, { batch: batch, }),
+      tasks: [],
     };
     cell.entity = mutant;
     mutants[mutant.id] = mutant;
@@ -370,85 +371,85 @@ window.Chem.onReady(function () {
   }
 
   function performAttackTask(entity) {
-    if (entity.task.target.deleted) {
+    var task = entity.tasks[0];
+    if (task.target.deleted) {
       // task complete
-      entity.task = null;
-      entity.inputs.attack = null;
-      entity.inputs.speed = 0;
+      stopCurrentTask(entity);
       return;
     }
-    entity.inputs.attack = entity.task.target;
-    if (entity.task.state === 'off') {
-      if (entity.pos.distanceTo(entity.task.target.pos) < entityAttackRadius) {
-        entity.task.state = 'attack';
-        entity.inputs.direction = entity.task.target.pos.minus(entity.pos).normalize();
+    entity.inputs.attack = task.target;
+    if (task.state === 'off') {
+      if (entity.pos.distanceTo(task.target.pos) < entityAttackRadius) {
+        task.state = 'attack';
+        entity.inputs.direction = task.target.pos.minus(entity.pos).normalize();
         entity.inputs.speed = entity.maxSpeed;
       } else {
-        entity.task.path = computePath(entity.pos, entity.task.target.pos, entityAttackRadius);
-        entity.task.state = 'path';
+        task.path = computePath(entity.pos, task.target.pos, entityAttackRadius);
+        task.state = 'path';
       }
     }
-    if (entity.task.state === 'path') {
+    if (task.state === 'path') {
       followPath(entity);
     }
   }
 
   function performPlantTask(member) {
-    if (member.task.state === 'off' || member.task.state === 'plant') {
-      if (grid.cell(member.task.pos).plant) {
+    var task = member.tasks[0];
+    if (task.state === 'off' || task.state === 'plant') {
+      if (grid.cell(task.pos).plant) {
         // nothing to do
-        member.task = null;
-        member.inputs.plant = null;
+        stopCurrentTask(member);
         return;
       }
     }
-    if (member.task.state === 'off') {
-      if (member.pos.distanceTo(member.task.pos) < crewChopRadius) {
-        member.task.state = 'plant';
+    if (task.state === 'off') {
+      if (member.pos.distanceTo(task.pos) < crewChopRadius) {
+        task.state = 'plant';
         member.inputs.plant = {
-          pos: member.task.pos,
-          type: member.task.plantType,
+          pos: task.pos,
+          type: task.plantType,
         };
       } else {
-        member.task.path = computePath(member.pos, member.task.pos, 1);
-        member.task.state = 'path';
+        task.path = computePath(member.pos, task.pos, 1);
+        task.state = 'path';
       }
     }
-    if (member.task.state === 'path') {
+    if (task.state === 'path') {
       followPath(member);
     }
   }
 
   function performChopTask(member) {
-    if (member.task.state === 'off') {
-      if (member.pos.distanceTo(member.task.pos) < crewChopRadius) {
-        member.task.state = 'chop';
-        member.inputs.chop = member.task.pos;
+    var task = member.tasks[0];
+    if (task.state === 'off') {
+      if (member.pos.distanceTo(task.pos) < crewChopRadius) {
+        task.state = 'chop';
+        member.inputs.chop = task.pos;
       } else {
-        member.task.path = computePath(member.pos, member.task.pos, 1);
-        member.task.state = 'path';
+        task.path = computePath(member.pos, task.pos, 1);
+        task.state = 'path';
       }
     }
-    if (member.task.state === 'chop') {
-      var chopCell = grid.cell(member.task.pos);
+    if (task.state === 'chop') {
+      var chopCell = grid.cell(task.pos);
       if (!chopCell.plant) {
         // mission accomplished
-        member.task = null;
-        member.inputs.chop = null;
+        stopCurrentTask(member);
       }
-    } else if (member.task.state === 'path') {
+    } else if (task.state === 'path') {
       followPath(member);
     }
   }
 
   function followPath(entity) {
-    var nextNode = entity.task.path[0].offset(0.5, 0.5);
+    var task = entity.tasks[0];
+    var nextNode = task.path[0].offset(0.5, 0.5);
     if (nextNode.distanceTo(entity.pos) < crewMaxSpeed) {
-      entity.task.path.shift();
-      if (entity.task.path.length === 0) {
+      task.path.shift();
+      if (task.path.length === 0) {
         // done following path
         updateEntityPos(entity, nextNode);
-        entity.task.state = 'off';
+        task.state = 'off';
         entity.inputs.speed = 0;
       }
     } else {
@@ -458,17 +459,18 @@ window.Chem.onReady(function () {
   }
 
   function performWalkTask(member) {
-    if (member.task.state === 'off') {
-      if (member.pos.floored().equals(member.task.pos.floored())) {
+    var task = member.tasks[0];
+    if (task.state === 'off') {
+      if (member.pos.floored().equals(task.pos.floored())) {
         // mission accomplished
-        member.task = null;
+        stopCurrentTask(member);
         return;
       } else {
-        member.task.path = computePath(member.pos, member.task.pos);
-        member.task.state = 'path';
+        task.path = computePath(member.pos, task.pos);
+        task.state = 'path';
       }
     }
-    if (member.task.state === 'path') {
+    if (task.state === 'path') {
       followPath(member);
     }
   }
@@ -636,26 +638,27 @@ window.Chem.onReady(function () {
   }
 
   function onMapRightClick() {
+    var shift = engine.buttonState(Chem.Button.Key_Shift);
     var pos = fromScreen(engine.mouse_pos);
     var command = crewOptions[selectedCrewOption];
     for (var id in crew) {
       var member = crew[id];
-      if (member.selected) command.fn(member, pos);
+      if (member.selected) command.fn(member, pos, shift);
     }
   }
 
-  function commandToWalk(member, pos) {
+  function commandToWalk(member, pos, queue) {
     var posFloored = pos.floored();
     pos = posFloored.offset(0.5, 0.5);
     var cell = grid.cell(posFloored);
     if (cell.plant) {
-      assignTask(member, {
+      assignTask(member, queue, {
         name: 'chop',
         pos: posFloored,
         state: 'off',
       });
     } else if (cell.terrain.walkable) {
-      assignTask(member, {
+      assignTask(member, queue, {
         name: 'walk',
         pos: pos.clone(),
         state: 'off',
@@ -663,11 +666,11 @@ window.Chem.onReady(function () {
     }
   }
 
-  function commandToPlantShrub(member, pos) {
+  function commandToPlantShrub(member, pos, queue) {
     var posFloored = pos.floored();
     var cell = grid.cell(posFloored);
     if (cell.terrain.plantable) {
-      assignTask(member, {
+      assignTask(member, queue, {
         name: 'plant',
         pos: posFloored,
         state: 'off',
@@ -676,12 +679,21 @@ window.Chem.onReady(function () {
     }
   }
 
-  function assignTask(member, task) {
-    member.inputs.chop = null;
-    member.inputs.plant = null;
-    member.inputs.attack = null;
-    member.inputs.speed = 0;
-    member.task = task;
+  function stopCurrentTask(entity) {
+    entity.inputs.chop = null;
+    entity.inputs.plant = null;
+    entity.inputs.attack = null;
+    entity.inputs.speed = 0;
+    entity.tasks.shift();
+  }
+
+  function assignTask(member, queue, task) {
+    if (queue) {
+      member.tasks.push(task);
+    } else {
+      stopCurrentTask(member);
+      member.tasks = [task];
+    }
   }
 
   function onMapLeftClick() {
@@ -777,6 +789,7 @@ window.Chem.onReady(function () {
       sprite: new Chem.Sprite(graphic, {
         batch: batch,
       }),
+      tasks: [],
     };
     grid.cell(pos).entity = crew[id];
   }
