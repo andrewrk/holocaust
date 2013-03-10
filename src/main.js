@@ -204,6 +204,12 @@ window.Chem.onReady(function () {
       newPos = mutant.pos.plus(vel);
       updateEntityPos(mutant, newPos);
 
+      // get hurt by happy nature land
+      var loc = mutant.pos.floored();
+      if (grid[loc.y][loc.x].terrain === landType.safe) {
+        changeEntityHealth(mutant, -0.0005 * dx);
+      }
+
       var attackTarget = mutant.inputs.attack;
       if (attackTarget && attackTarget.pos.distanceTo(mutant.pos) <= entityAttackRadius) {
         changeEntityHealth(attackTarget, -mutantHurtAmt * dx);
@@ -330,6 +336,7 @@ window.Chem.onReady(function () {
     var graphic = Math.floor(Math.random() * 2) ? 'manmutant' : 'ladymutant';
     var mutant = {
       id: nextId(),
+      entities: mutants,
       graphic: graphic,
       name: 'Mutant',
       health: 1,
@@ -766,15 +773,15 @@ window.Chem.onReady(function () {
     updateMiniMapTimer = setTimeout(generateMiniMap, 0);
   }
 
-  function die(crewMember) {
-    crewMember.deleted = true; // for lingering references
-    crewMember.sprite.setAnimationName(crewMember.graphic + 'die');
-    crewMember.sprite.setFrameIndex(0);
-    crewMember.sprite.on('animation_end', function() {
-      crewMember.sprite.delete();
+  function die(entity) {
+    entity.deleted = true; // for lingering references
+    entity.sprite.setAnimationName(entity.graphic.replace('mutant', '') + 'die');
+    entity.sprite.setFrameIndex(0);
+    entity.sprite.on('animation_end', function() {
+      entity.sprite.delete();
     });
-    delete crew[crewMember.id];
-    var loc = crewMember.pos.floored();
+    delete entity.entities[entity.id];
+    var loc = entity.pos.floored();
     var cell = grid[loc.y][loc.x];
     cell.entity = null;
   }
@@ -797,6 +804,7 @@ window.Chem.onReady(function () {
     var id = nextId();
     crew[id] = {
       id: id,
+      entities: crew,
       graphic: graphic,
       name: name,
       health: 1,
