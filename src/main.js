@@ -433,19 +433,8 @@ window.Chem.onReady(function () {
       var chopCell = grid.cell(member.task.pos);
       if (!chopCell.plant) {
         // mission accomplished
-        // look for close by tree
-        var nextPos = findClosest(member.task.pos, crewLosRadius, function(cell) {
-          return !!cell.plant;
-        });
-        if (nextPos) {
-          // chop next tree
-          member.task.pos = nextPos;
-          member.task.state = 'off';
-        } else {
-          // no more trees seen
-          member.task = null;
-          member.inputs.chop = null;
-        }
+        member.task = null;
+        member.inputs.chop = null;
       }
     } else if (member.task.state === 'path') {
       followPath(member);
@@ -902,25 +891,6 @@ window.Chem.onReady(function () {
     };
   }
 
-  function findClosest(start, radius, matchFn) {
-    var results = aStar({
-      start: start,
-      isEnd: function(node) {
-        var cell = grid.cell(node);
-        return matchFn(cell);
-      },
-      neighbor: createNeighborFn({
-        start: start,
-        maxDistance: crewLosRadius,
-        extraWalkableCells: matchFn,
-      }),
-      distance: pointDistance,
-      heuristic: function(node) {
-        return 0; // no heuristic
-      },
-    });
-    return results.status === 'success' ? results.path.pop() : null;
-  }
   function createNeighborFn(options) {
     options = options || {};
     var start = options.start;
