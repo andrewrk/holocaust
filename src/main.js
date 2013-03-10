@@ -1,8 +1,10 @@
 //depend "chem"
 //depend "astar"
+//depend "grid"
 window.Chem.onReady(function () {
   var Chem = window.Chem
     , aStar = window.aStar
+    , Grid = window.Holocaust.Grid
     , v = Chem.Vec2d
     , canvas = document.getElementById("game")
     , engine = new Chem.Engine(canvas)
@@ -13,7 +15,6 @@ window.Chem.onReady(function () {
   var isEverythingExplored = false;
   var lastId = 0;
   var cellSize = v(6, 6);
-  var gridSize = engine.size.divBy(cellSize).floor()
   var crew = {};
   var crewLosRadius = 4;
   var crewChopRadius = 1.6;
@@ -28,59 +29,6 @@ window.Chem.onReady(function () {
   var plantTypes = {
     shrub: {
       image: shrubImage,
-    },
-  };
-  var landType = {
-    treeAdult: { // dummy, used for generation and then gets replaced
-      color: '#000000',
-    },
-    safe: {
-      name: "Safe",
-      color: '#48C13C',
-      texture: Chem.getImage('dirt'),
-      walkable: true,
-      plantable: true,
-      spawnable: false,
-    },
-    fatal: {
-      name: "Fatal",
-      color: '#860600',
-      texture: Chem.getImage('danger'),
-      walkable: true,
-      plantable: false,
-      spawnable: true,
-    },
-    oxygenated: {
-      name: "Oxygenated Land",
-      color: '#3CC162',
-      texture: Chem.getImage('oxygendirt'),
-      walkable: true,
-      plantable: true,
-      spawnable: false,
-    },
-    danger: {
-      name: "Danger",
-      color: '#F30B00',
-      texture: Chem.getImage('dirtno2'),
-      walkable: true,
-      plantable: true,
-      spawnable: true,
-    },
-    cleanWater: {
-      name: "Clean Water",
-      color: '#548FC4',
-      texture: Chem.getImage('water'),
-      walkable: false,
-      plantable: false,
-      spawnable: false,
-    },
-    contaminatedWater: {
-      name: "Contaminated Water",
-      color: '#6D2A49',
-      texture: Chem.getImage('evilwater'),
-      walkable: false,
-      plantable: false,
-      spawnable: false,
     },
   };
   var crewOptions = [
@@ -106,11 +54,11 @@ window.Chem.onReady(function () {
     attack: performAttackTask,
   };
 
-  var grid = gridFromPerlinNoise();
+  var grid = Grid.create(engine.size.divBy(cellSize).floor());
 
   var zoom = v(3, 3);
   var scroll = engine.size.clone();
-  var miniMapPos = engine.size.minus(gridSize).offset(-2, -2);
+  var miniMapPos = engine.size.minus(grid.size).offset(-2, -2);
   var miniMapBoxSize = v();
   var controlBoxPos = v(0, miniMapPos.y);
   var controlBoxSize = v(miniMapPos.x, engine.size.y - controlBoxPos.y);
@@ -128,7 +76,6 @@ window.Chem.onReady(function () {
   var nextMutantSpawn = 0;
 
   createSafeStartArea();
-  generateTerrainTextures();
   generateMiniMap();
 
   engine.on('buttondown', onButtonDown);
@@ -140,10 +87,10 @@ window.Chem.onReady(function () {
 
   function onButtonDown(button) {
     if (button === Chem.Button.Mouse_Left) {
-      if (inside(engine.mouse_pos, miniMapPos, gridSize)) return;
+      if (inside(engine.mouse_pos, miniMapPos, grid.size)) return;
       onMapLeftClick();
     } else if (button === Chem.Button.Mouse_Right) {
-      if (inside(engine.mouse_pos, miniMapPos, gridSize)) return;
+      if (inside(engine.mouse_pos, miniMapPos, grid.size)) return;
       onMapRightClick();
     } else if (engine.buttonState(Chem.Button.Mouse_Left)) {
       // cheatz!!
@@ -173,7 +120,7 @@ window.Chem.onReady(function () {
     } else if (engine.buttonState(Chem.Button.Key_Down)) {
       scroll.y += 10 * dx;
     }
-    if (engine.buttonState(Chem.Button.Mouse_Left) && inside(engine.mouse_pos, miniMapPos, gridSize)) {
+    if (engine.buttonState(Chem.Button.Mouse_Left) && inside(engine.mouse_pos, miniMapPos, grid.size)) {
       scroll = engine.mouse_pos.minus(miniMapPos).minus(miniMapBoxSize.scaled(0.5)).times(cellSize).times(zoom);
     }
     scroll.floor();
@@ -183,7 +130,7 @@ window.Chem.onReady(function () {
       plant = growingPlants[id];
       plant.growing -= 0.002 * dx;
       if (plant.growing <= 0) {
-        delete plant.growing;
+        plant.growing = null;
         delete growingPlants[id];
         plantFinishGrowing(plant);
       }
@@ -195,7 +142,7 @@ window.Chem.onReady(function () {
       spawnMutant();
     }
 
-    var vel, newPos;
+    var vel, newPos, terrain;
     for (id in mutants) {
       var mutant = mutants[id];
 
@@ -205,18 +152,8 @@ window.Chem.onReady(function () {
       updateEntityPos(mutant, newPos);
 
       // mutant health updates
-      var loc = mutant.pos.floored();
-      var terrain = grid[loc.y][loc.x].terrain;
-      if (terrain === landType.safe) {
-        // get hurt by happy nature land
-        changeEntityHealth(mutant, -0.0005 * dx);
-      } else if (terrain === landType.danger) {
-        // heal from danger zone
-        changeEntityHealth(mutant, 0.005 * dx);
-      } else if (terrain === landType.fatal) {
-        // full heal from death zone
-        changeEntityHealth(mutant, 1);
-      }
+      terrain = grid.cell(mutant.pos.floored()).terrain;
+      changeEntityHealth(mutant, dx * terrain.mutantDamage);
 
       var attackTarget = mutant.inputs.attack;
       if (attackTarget && attackTarget.pos.distanceTo(mutant.pos) <= entityAttackRadius) {
@@ -229,11 +166,13 @@ window.Chem.onReady(function () {
       } else {
         // pick a random crew member to harass
         var randomCrewId = pickNRandomProps(crew, 1)[0];
-        assignTask(mutant, {
-          name: 'attack',
-          state: 'off',
-          target: crew[randomCrewId],
-        });
+        if (randomCrewId) {
+          assignTask(mutant, {
+            name: 'attack',
+            state: 'off',
+            target: crew[randomCrewId],
+          });
+        }
       }
     }
 
@@ -245,13 +184,10 @@ window.Chem.onReady(function () {
 
       // get hurt by dangerous land
       var loc = member.pos.floored();
-      var cell = grid[loc.y][loc.x];
-      var terrain = cell.terrain;
-      if (terrain === landType.danger) {
-        changeEntityHealth(member, -0.005 * dx);
-      } else if (terrain === landType.fatal) {
-        changeEntityHealth(member, -1);
-      }
+      var cell = grid.cell(loc);
+      terrain = cell.terrain;
+      var damage = terrain.damage || 0;
+      changeEntityHealth(member, damage * dx);
       if (member.deleted) continue;
 
       // explore areas around crew members
@@ -260,7 +196,7 @@ window.Chem.onReady(function () {
           var targetPos = loc.offset(x, y);
           if (! inGrid(targetPos)) continue;
           if (targetPos.distanceTo(member.pos) <= crewLosRadius) {
-            if (!grid[targetPos.y][targetPos.x].explored) {
+            if (!grid.cell(targetPos).explored) {
               explore(member, targetPos);
             }
           }
@@ -270,13 +206,13 @@ window.Chem.onReady(function () {
       if (member.inputs.chop) {
         var chopPos = member.inputs.chop;
         if (chopPos.distanceTo(member.pos) <= crewChopRadius) {
-          var chopCell = grid[chopPos.y][chopPos.x];
+          var chopCell = grid.cell(chopPos);
           plant = chopCell.plant;
           if (plant && (! plant.growing)) {
             plant.chopCount = plant.chopCount || 1;
             plant.chopCount -= 0.008 * dx;
             if (plant.chopCount <= 0) {
-              delete chopCell.plant;
+              chopCell.plant = null;
               plantDestroyed(plant);
             }
           }
@@ -284,16 +220,10 @@ window.Chem.onReady(function () {
       } else if (member.inputs.plant) {
         var plantPos = member.inputs.plant.pos;
         if (plantPos.distanceTo(member.pos) <= crewChopRadius) {
-          var plantCell = grid[plantPos.y][plantPos.x];
+          var plantCell = grid.cell(plantPos);
           if (plantCell.terrain.plantable && seedCount > 0 && !plantCell.plant) {
-            plant = {
-              id: nextId(),
-              growing: 1,
-              pos: plantPos,
-              type: member.inputs.plant.type,
-            };
-            plantCell.plant = plant;
-            growingPlants[plant.id] = plant;
+            plantCell.setGrowingPlant(member.inputs.plant.type);
+            growingPlants[plantCell.plant.id] = plantCell.plant;
             seedCount -= 1;
           }
         }
@@ -320,20 +250,20 @@ window.Chem.onReady(function () {
   }
 
   function spawnMutant() {
-    var start = gridSize.times(v(Math.random(), Math.random())).floor();
+    var start = grid.size.times(v(Math.random(), Math.random())).floor();
     var it = start.clone();
     // iterate until we find a spawnable cell or end up back at start
     while(true) {
-      var cell = grid[it.y][it.x];
+      var cell = grid.cell(it);
       if (cell.terrain.spawnable && ! cell.plant && ! cell.entity) {
         spawnMutantAt(cell);
         return;
       }
       it.x += 1;
-      if (it.x >= gridSize.x) {
+      if (it.x >= grid.size.x) {
         it.x = 0;
         it.y += 1;
-        if (it.y >= gridSize.y) {
+        if (it.y >= grid.size.y) {
           it.y = 0;
         }
       }
@@ -365,7 +295,7 @@ window.Chem.onReady(function () {
     // make the area around the plant oxygenated
     for (var y = -1; y <= 1; ++y) {
       for (var x = -1; x <= 1; ++x) {
-        computeOxygenation(plant.pos.offset(x, y));
+        computeOxygenation(plant.cell.pos.offset(x, y));
       }
     }
     updateMiniMap();
@@ -374,7 +304,7 @@ window.Chem.onReady(function () {
   function plantDestroyed(plant) {
     for (var y = -1; y <= 1; ++y) {
       for (var x = -1; x <= 1; ++x) {
-        computeOxygenation(plant.pos.offset(x, y));
+        computeOxygenation(plant.cell.pos.offset(x, y));
       }
     }
     seedCount += 2;
@@ -382,21 +312,21 @@ window.Chem.onReady(function () {
   }
 
   function computeOxygenation(pt) {
-    var cell = grid[pt.y][pt.x];
+    var cell = grid.cell(pt);
     var neighborPlantCount = getNeighborCount(pt, function(cell) { return cell.plant });
-    if (cell.terrain === landType.danger && neighborPlantCount > 0) {
+    if (cell.terrain === Grid.terrains.danger && neighborPlantCount > 0) {
       oxygenateCell(cell);
-    } else if (cell.terrain === landType.oxygenated && neighborPlantCount === 0) {
+    } else if (cell.terrain === Grid.terrains.oxygenated && neighborPlantCount === 0) {
       deoxygenateCell(cell);
     }
   }
 
   function oxygenateCell(cell) {
-    cell.terrain = landType.oxygenated;
+    cell.terrain = Grid.terrains.oxygenated;
   }
 
   function deoxygenateCell(cell) {
-    cell.terrain = landType.danger;
+    cell.terrain = Grid.terrains.danger;
   }
 
   function getNeighborCount(pt, matchFn) {
@@ -404,7 +334,7 @@ window.Chem.onReady(function () {
     for (var y = -1; y <= 1; ++y) {
       for (var x = -1; x <= 1; ++x) {
         var thisPt = pt.offset(x, y);
-        var thisCell = grid[thisPt.y][thisPt.x];
+        var thisCell = grid.cell(thisPt);
         if (matchFn(thisCell)) count += 1;
       }
     }
@@ -414,9 +344,9 @@ window.Chem.onReady(function () {
   function updateEntityPos(entity, newPos) {
     var newPosFloored = newPos.floored();
     var oldPos = entity.pos.floored();
-    var cell = grid[oldPos.y][oldPos.x];
+    var cell = grid.cell(oldPos);
     if (! newPosFloored.equals(oldPos)) {
-      var newCell = grid[newPosFloored.y][newPosFloored.x];
+      var newCell = grid.cell(newPosFloored);
       if (newCell.entity == null && newCell.terrain.walkable && !newCell.plant) {
         cell.entity = null;
         entity.pos = newPos;
@@ -446,7 +376,7 @@ window.Chem.onReady(function () {
 
   function performPlantTask(member) {
     if (member.task.state === 'off' || member.task.state === 'plant') {
-      if (grid[member.task.pos.y][member.task.pos.x].plant) {
+      if (grid.cell(member.task.pos).plant) {
         // nothing to do
         member.task = null;
         member.inputs.plant = null;
@@ -481,7 +411,7 @@ window.Chem.onReady(function () {
       }
     }
     if (member.task.state === 'chop') {
-      var chopCell = grid[member.task.pos.y][member.task.pos.x];
+      var chopCell = grid.cell(member.task.pos);
       if (!chopCell.plant) {
         // mission accomplished
         // look for close by tree
@@ -542,12 +472,12 @@ window.Chem.onReady(function () {
     var end = fromScreen(engine.size).ceil();
     if (start.x < 0) start.x = 0;
     if (start.y < 0) start.y = 0;
-    if (end.x >= gridSize.x) end.x = gridSize.x - 1;
-    if (end.y >= gridSize.y) end.y = gridSize.y - 1;
+    if (end.x >= grid.size.x) end.x = grid.size.x - 1;
+    if (end.y >= grid.size.y) end.y = grid.size.y - 1;
     var it = v();
     var size = sizeToScreen(v(1, 1));
     for (it.y = start.y; it.y < end.y; it.y += 1) {
-      var row = grid[it.y];
+      var row = grid.cells[it.y];
       for (it.x = start.x; it.x < end.x; it.x += 1) {
         if (! row[it.x].explored) continue;
         var pos = toScreen(it);
@@ -601,14 +531,14 @@ window.Chem.onReady(function () {
       context.fillRect(start.x, start.y - entity.sprite.size.y, healthBarSize.x * entity.health, healthBarSize.y);
     }
     function drawEntities(entities) {
-      for (id in entities) {
+      for (var id in entities) {
         var entity = entities[id];
         if (entity.selected) {
           context.fillStyle = '#ffffff';
           context.fillText(entity.name,
               entity.sprite.pos.x, entity.sprite.pos.y - entity.sprite.size.y - 5);
         }
-        if (entity.selected || entity.health != 1) {
+        if (entity.selected || entity.health !== 1) {
           drawEntityHealth(entity);
         }
       }
@@ -621,7 +551,7 @@ window.Chem.onReady(function () {
     if (anyCrewSelected) {
       var mouseCellPos = fromScreen(engine.mouse_pos).floor();
       if (inGrid(mouseCellPos)) {
-        var mouseCell = grid[mouseCellPos.y][mouseCellPos.x];
+        var mouseCell = grid.cell(mouseCellPos);
         var screenMouseCellPos = toScreen(mouseCellPos);
         var img = crewOptions[selectedCrewOption].image;
         if (selectedCrewOption === 0) {
@@ -668,7 +598,7 @@ window.Chem.onReady(function () {
     var miniMapTopLeft = fromScreen(v(0, 0));
     var miniMapBottomRight = fromScreen(engine.size);
     miniMapBoxSize = miniMapBottomRight.minus(miniMapTopLeft);
-    context.strokeStyle = '#696969';
+    context.strokeStyle = '#ffffff';
     context.strokeRect(miniMapPos.x + miniMapTopLeft.x,
         miniMapPos.y + miniMapTopLeft.y,
         miniMapBoxSize.x, miniMapBoxSize.y);
@@ -679,9 +609,10 @@ window.Chem.onReady(function () {
   }
 
   function setEverythingExplored() {
-    for (var y = 0; y < gridSize.y; ++y) {
-      for (var x = 0; x < gridSize.x; ++x) {
-        grid[y][x].explored = true;
+    var it = v();
+    for (it.y = 0; it.y < grid.size.y; it.y += 1) {
+      for (it.x = 0; it.x < grid.size.x; it.x += 1) {
+        grid.cell(it).explored = true;
       }
     }
     isEverythingExplored = true;
@@ -693,7 +624,7 @@ window.Chem.onReady(function () {
       pos.y >= start.y && pos.y < end.y;
   }
   function inGrid(vec) {
-    return vec.x >= 0 && vec.y >= 0 && vec.x < gridSize.x && vec.y < gridSize.y;
+    return vec.x >= 0 && vec.y >= 0 && vec.x < grid.size.x && vec.y < grid.size.y;
   }
 
   function onMapRightClick() {
@@ -708,7 +639,7 @@ window.Chem.onReady(function () {
   function commandToWalk(member, pos) {
     var posFloored = pos.floored();
     pos = posFloored.offset(0.5, 0.5);
-    var cell = grid[posFloored.y][posFloored.x];
+    var cell = grid.cell(posFloored);
     if (cell.plant) {
       assignTask(member, {
         name: 'chop',
@@ -726,7 +657,7 @@ window.Chem.onReady(function () {
 
   function commandToPlantShrub(member, pos) {
     var posFloored = pos.floored();
-    var cell = grid[posFloored.y][posFloored.x];
+    var cell = grid.cell(posFloored);
     if (cell.terrain.plantable) {
       assignTask(member, {
         name: 'plant',
@@ -761,7 +692,7 @@ window.Chem.onReady(function () {
   }
 
   function explore(crewMember, pos) {
-    grid[pos.y][pos.x].explored = true;
+    grid.cell(pos).explored = true;
     updateMiniMap();
   }
 
@@ -803,8 +734,7 @@ window.Chem.onReady(function () {
       entity.sprite.delete();
     });
     delete entity.entities[entity.id];
-    var loc = entity.pos.floored();
-    var cell = grid[loc.y][loc.x];
+    var cell = grid.cell(entity.pos.floored());
     cell.entity = null;
   }
 
@@ -839,181 +769,9 @@ window.Chem.onReady(function () {
         batch: batch,
       }),
     };
-    grid[pos.y][pos.x].entity = crew[id];
+    grid.cell(pos).entity = crew[id];
   }
 
-  function gridFromPerlinNoise() {
-    var terrainThresholds = [
-      {
-        terrain: landType.fatal,
-        weight: 0.20,
-      },
-      {
-        terrain: landType.danger,
-        weight: 0.50,
-      },
-      {
-        terrain: landType.safe,
-        weight: 0.15,
-      },
-      {
-        terrain: landType.treeAdult,
-        weight: 0.15,
-      },
-    ];
-
-    var perlinNoise = generatePerlinNoise(gridSize.x, gridSize.y);
-    var sum = 0;
-    terrainThresholds.forEach(function(item) {
-      sum += item.weight;
-      item.threshold = sum;
-    });
-    var grid = createArray(gridSize.x, gridSize.y);
-    var x;
-    for (var y = 0; y < gridSize.y; ++y) {
-      var gridRow = grid[y];
-      var perlinRow = perlinNoise[y];
-      for (x = 0; x < gridSize.x; ++x) {
-        // just in case the weights don't add up to 1
-        gridRow[x] = {terrain: landType.safe};
-        for (var i = 0; i < terrainThresholds.length; ++i) {
-          if (perlinRow[x] < terrainThresholds[i].threshold) {
-            gridRow[x] = {terrain: terrainThresholds[i].terrain};
-            break;
-          }
-        }
-      }
-    }
-    // add rivers
-    var waterCount = 0;
-    while (waterCount < 1000) {
-      waterCount += addRiver();
-    }
-    // convert trees to plants
-    for (y = 0; y < gridSize.y; ++y) {
-      for (x = 0; x < gridSize.x; ++x) {
-        var cell = grid[y][x];
-        cell.pos = v(x, y);
-        if (cell.terrain === landType.treeAdult) {
-          cell.plant = {
-            type: 'shrub',
-            pos: v(x, y),
-          };
-          cell.terrain = landType.safe;
-        }
-      }
-    }
-    return grid;
-    function addRiver() {
-      var count = 0;
-      var it = v(Math.random() * gridSize.x, 0).floor();
-      var itRadius = Math.floor(Math.random() * 5) + 2;
-      while(it.y < gridSize.y) {
-        if (itRadius < 1) itRadius = 1;
-        if (itRadius > 10) itRadius = 10;
-        for (x = it.x - itRadius; x < it.x + itRadius; ++x) {
-          if (x < 0 || x >= gridSize.x) continue;
-          grid[it.y][x].terrain = waterizeTerrain(grid[it.y][x].terrain);
-          count += 1;
-        }
-        it.y += 1;
-        it.x += Math.floor(Math.random() * 3) - 1;
-        itRadius += Math.floor(Math.random() * 3) - 1;
-      }
-      return count;
-    }
-  }
-  function waterizeTerrain(terrain) {
-    if (terrain === landType.safe) {
-      return landType.cleanWater;
-    } else if (terrain === landType.danger) {
-      return landType.contaminatedWater;
-    } else if (terrain === landType.fatal) {
-      return landType.contaminatedWater;
-    } else if (terrain === landType.treeAdult) {
-      return landType.cleanWater;
-    } else {
-      return terrain;
-    }
-  }
-  function generatePerlinNoise(width, height, options) {
-    options = options || {};
-    var octaveCount = options.octaveCount || 4;
-    var amplitude = options.amplitude || 0.1;
-    var persistence = options.persistence || 0.2;
-    var whiteNoise = generateWhiteNoise(gridSize.x, gridSize.y);
-
-    var smoothNoiseList = new Array(octaveCount);
-    var i, y, x, row;
-    for (i = 0; i < octaveCount; ++i) {
-      smoothNoiseList[i] = generateSmoothNoise(i);
-    }
-    var perlinNoise = createArray(width, height);
-    var totalAmplitude = 0;
-    // blend noise together
-    for (i = octaveCount - 1; i >= 0; --i) {
-      amplitude *= persistence;
-      totalAmplitude += amplitude;
-
-      for (y = 0; y < height; ++y) {
-        for (x = 0; x < width; ++x) {
-          perlinNoise[y][x] = perlinNoise[y][x] || 0;
-          perlinNoise[y][x] += smoothNoiseList[i][y][x] * amplitude;
-        }
-      }
-    }
-    // normalization
-    for (y = 0; y < height; ++y) {
-      for (x = 0; x < width; ++x) {
-        perlinNoise[y][x] /= totalAmplitude;
-      }
-    }
-    return perlinNoise;
-    function generateSmoothNoise(octave) {
-      var noise = createArray(width, height);
-      var samplePeriod = Math.pow(2, octave);
-      var sampleFrequency = 1 / samplePeriod;
-      for (var y = 0; y < height; ++y) {
-        var row = noise[y];
-        var sampleY0 = Math.floor(y / samplePeriod) * samplePeriod;
-        var sampleY1 = (sampleY0 + samplePeriod) % height;
-        var vertBlend = (y - sampleY0) * sampleFrequency;
-        for (var x = 0; x < width; ++x) {
-          var sampleX0 = Math.floor(x / samplePeriod) * samplePeriod;
-          var sampleX1 = (sampleX0 + samplePeriod) % width;
-          var horizBlend = (x - sampleX0) * sampleFrequency;
-
-          // blend top two corners
-          var top = interpolate(whiteNoise[sampleY0][sampleX0], whiteNoise[sampleY1][sampleX0], vertBlend);
-          // blend bottom two corners
-          var bottom = interpolate(whiteNoise[sampleY0][sampleX1], whiteNoise[sampleY1][sampleX1], vertBlend);
-          // final blend
-          row[x] = interpolate(top, bottom, horizBlend);
-        }
-      }
-      return noise;
-    }
-    function generateWhiteNoise() {
-      var noise = createArray(width, height);
-      for (var y = 0; y < height; ++y) {
-        var row = noise[y];
-        for (var x = 0; x < width; ++x) {
-          row[x] = Math.random();
-        }
-      }
-      return noise;
-    }
-    function interpolate(x0, x1, alpha) {
-      return x0 * (1 - alpha) + alpha * x1;
-    }
-  }
-  function createArray(w, h) {
-    var arr = new Array(h);
-    for (var y = 0; y < h; ++y) {
-      arr[y] = new Array(w);
-    }
-    return arr;
-  }
 
   function computePath(member, dest, endRadius) {
     endRadius = endRadius || 0.0000001;
@@ -1047,8 +805,8 @@ window.Chem.onReady(function () {
     }
     function createUnsafeHeuristicFn(member) {
       return function (node) {
-        var terrainAtNode = grid[node.y][node.x].terrain;
-        var unsafePenalty = (terrainAtNode === landType.danger) ? 100 : 0;
+        var terrainAtNode = grid.cell(node).terrain;
+        var unsafePenalty = (terrainAtNode === Grid.terrains.danger) ? 100 : 0;
         return node.distanceTo(member.task.pos) + unsafePenalty;
       };
     }
@@ -1068,20 +826,18 @@ window.Chem.onReady(function () {
   function createSafeStartArea() {
     // make a safe area to start out on
     var startSize = v(4, 4);
-    var startPos = gridSize.scaled(0.5).floor();
-    var x, y;
-    for (y = startPos.y - startSize.y; y < startPos.y + startSize.y; ++y) {
-      for (x = startPos.x - startSize.x; x < startPos.x + startSize.x; ++x) {
-        grid[y][x].terrain = landType.safe;
-        grid[y][x].plant = null;
+    var startPos = grid.size.scaled(0.5).floor();
+    var it = v();
+    for (it.y = startPos.y - startSize.y; it.y < startPos.y + startSize.y; it.y += 1) {
+      for (it.x = startPos.x - startSize.x; it.x < startPos.x + startSize.x; it.x += 1) {
+        var cell = grid.cell(it);
+        cell.terrain = Grid.terrains.safe;
+        cell.plant = null;
       }
     }
-    for (y = startPos.y - 1; y < startPos.y + 1; ++y) {
-      for (x = startPos.x - 1; x < startPos.x + 1; ++x) {
-        grid[y][x].plant = {
-          type: 'shrub',
-          pos: v(x, y),
-        };
+    for (it.y = startPos.y - 1; it.y < startPos.y + 1; it.y += 1) {
+      for (it.x = startPos.x - 1; it.x < startPos.x + 1; it.x += 1) {
+        grid.cell(it).setNewPlant('shrub');
       }
     }
     createCrewMember("Dean", "man", startPos.offset(-2, 0));
@@ -1090,40 +846,25 @@ window.Chem.onReady(function () {
     createCrewMember("Andy", "man", startPos.offset(0, 2));
   }
 
-  function generateTerrainTextures() {
-    for (var id in landType) {
-      var terrain = landType[id];
-      terrain.pixel = engine.context.createImageData(1, 1);
-      var d = terrain.pixel.data;
-      var colorParts = extractRgba(terrain.color);
-      d[0] = colorParts.red;
-      d[1] = colorParts.green;
-      d[2] = colorParts.blue;
-      d[3] = colorParts.alpha || 255;
-    }
-  }
 
   function generateMiniMap() {
     var buffer = document.createElement('canvas');
-    buffer.width = gridSize.x + 4;
-    buffer.height = gridSize.y + 4;
+    buffer.width = grid.size.x + 4;
+    buffer.height = grid.size.y + 4;
     var context = buffer.getContext('2d');
     // border
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, buffer.width, buffer.height);
     // start with black
     context.fillStyle = '#000000';
-    context.fillRect(2, 2, gridSize.x, gridSize.y);
-    for (var y = 0; y < gridSize.y; ++y) {
-      for (var x = 0; x < gridSize.x; ++x) {
-        var cell = grid[y][x];
+    context.fillRect(2, 2, grid.size.x, grid.size.y);
+    var it = v();
+    for (it.y = 0; it.y < grid.size.y; it.y += 1) {
+      for (it.x = 0; it.x < grid.size.x; it.x += 1) {
+        var cell = grid.cell(it);
         if (! cell.explored) continue;
-        if (cell.plant) {
-          context.fillStyle = '#002702';
-        } else {
-          context.fillStyle = cell.terrain.color;
-        }
-        context.fillRect(2 + x, 2 + y, 1, 1);
+        context.fillStyle = cell.plant ? '#002702' : cell.terrain.color;
+        context.fillRect(1 + it.x, 1 + it.y, 1, 1);
       }
     }
     miniMapImage = buffer;
@@ -1143,7 +884,7 @@ window.Chem.onReady(function () {
     var results = aStar({
       start: start,
       isEnd: function(node) {
-        var cell = grid[node.y][node.x];
+        var cell = grid.cell(node);
         return matchFn(cell);
       },
       neighbor: createNeighborFn({
@@ -1179,18 +920,18 @@ window.Chem.onReady(function () {
 
       function addIfSafe(vec) {
         var pt = node.plus(vec);
-        if (pt.x >= gridSize.x || pt.x < 0 ||
-            pt.y >= gridSize.y || pt.y < 0)
+        if (pt.x >= grid.size.x || pt.x < 0 ||
+            pt.y >= grid.size.y || pt.y < 0)
         {
           return false;
         }
         if (maxDistance != null && pt.distanceTo(start) > maxDistance) {
           return false;
         }
-        var cell = grid[pt.y][pt.x];
+        var cell = grid.cell(pt);
         var terrain = cell.terrain;
         if ((!extraWalkableCells || !extraWalkableCells(cell)) && (cell.entity || cell.plant || !terrain.walkable ||
-            (unsafe && (terrain === landType.fatal)) || (!unsafe && !terrain.safe)))
+            (unsafe && (terrain === Grid.terrains.fatal)) || (!unsafe && !terrain.safe)))
         {
           return false;
         }
