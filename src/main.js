@@ -63,6 +63,9 @@ window.Chem.onReady(function () {
     build: performBuildTask,
     attack: performAttackTask,
   };
+  var buildingOnUpdateFns = {
+    turret: turretOnUpdate,
+  };
   var buildingResources = {
     turret: {
       seed: 10,
@@ -167,6 +170,10 @@ window.Chem.onReady(function () {
         plant.chopCount = null;
         delete partiallyChoppedPlants[id];
       }
+    }
+    for (id in buildings) {
+      var building = buildings[id];
+      buildingOnUpdateFns[building.type](building);
     }
 
     nextMutantSpawn -= dx;
@@ -288,6 +295,8 @@ window.Chem.onReady(function () {
           direction: v(1, 0),
           cooldown: 1,
           cooldownAmt: 0.05,
+          target: null,
+          losRadius: 4,
           cell: buildCell,
         };
         buildings[buildCell.building.id] = buildCell.building;
@@ -1100,6 +1109,42 @@ window.Chem.onReady(function () {
       }
     }
     return results;
+  }
+  function turretOnUpdate(turret) {
+    var center = turret.cell.pos.offset(0.5, 0.5);
+    if (turret.target && turret.target.deleted) turret.target = null;
+    if (turret.target == null || targetOutOfRange()) {
+      pickClosestTarget();
+    }
+    if (turret.target != null) {
+      // aim at target
+      turret.direction = turret.target.pos.minus(center).normalize();
+    }
+
+    function pickClosestTarget() {
+      var start = turret.cell.pos.offset(-turret.losRadius, -turret.losRadius);
+      var end = turret.cell.pos.offset(turret.losRadius, turret.losRadius);
+      var it = v();
+      var best = null;
+      var bestDist = null;
+      for (it.y = start.y; it.y <= end.y; it.y += 1) {
+        for (it.x = start.x; it.x <= end.x; it.x += 1) {
+          var cell = grid.cell(it);
+          var entity = cell.entity;
+          if (!entity || entity.human) continue;
+          var dist = center.distanceTo(entity.pos);
+          if (bestDist == null || dist < bestDist) {
+            bestDist = dist;
+            best = entity;
+          }
+        }
+      }
+      turret.target = best;
+    }
+    function targetOutOfRange() {
+      var dist = turret.target.pos.distanceTo(center);
+      return dist > turret.losRadius;
+    }
   }
 });
 
