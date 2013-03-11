@@ -17,8 +17,8 @@ window.Chem.onReady(function () {
   var cellSize = v(6, 6);
   var crew = {};
   var crewLosRadius = 4;
-  var crewChopRadius = 1.6;
-  var entityAttackRadius = 0.8;
+  var entityActionRadius = 1;
+  var entityAttackRadius = 1;
   var crewMaxSpeed = 0.1;
   var mutantMaxSpeed = 0.05;
   var saplingImage = Chem.getImage('sapling');
@@ -227,13 +227,13 @@ window.Chem.onReady(function () {
       }
 
       function onAttack(attackTarget) {
-        if (attackTarget.pos.distanceTo(entity.pos) <= entityAttackRadius) {
+        if (attackTarget.pos.floored().distanceTo(entity.pos.floored()) <= entityAttackRadius) {
           onEntityAttacked(attackTarget, entity);
           changeEntityHealth(attackTarget, -entity.attackAmt * dx);
         }
       }
       function onChop(chopPos) {
-        if (chopPos.distanceTo(entity.pos) <= crewChopRadius) {
+        if (chopPos.floored().distanceTo(entity.pos.floored()) <= entityActionRadius) {
           var chopCell = grid.cell(chopPos);
           plant = chopCell.plant;
           if (plant && (! plant.growing)) {
@@ -249,7 +249,7 @@ window.Chem.onReady(function () {
         }
       }
       function onPlant(plantInput) {
-        if (plantInput.pos.distanceTo(entity.pos) <= crewChopRadius) {
+        if (plantInput.pos.floored().distanceTo(entity.pos.floored()) <= entityActionRadius) {
           var plantCell = grid.cell(plantInput.pos);
           if (plantCell.terrain.plantable && seedCount > 0 && !plantCell.plant) {
             plantCell.setGrowingPlant(plantInput.type);
@@ -423,10 +423,8 @@ window.Chem.onReady(function () {
     }
     entity.inputs.attack = task.target;
     if (task.state === 'off') {
-      if (entity.pos.distanceTo(task.target.pos) < entityAttackRadius) {
-        task.state = 'attack';
-        entity.inputs.direction = task.target.pos.minus(entity.pos).normalize();
-        entity.inputs.speed = entity.maxSpeed;
+      if (inRange()) {
+        switchToAttackState();
       } else {
         task.path = computePath(entity.pos, task.target.pos, {
           endRadius: entityAttackRadius,
@@ -437,6 +435,14 @@ window.Chem.onReady(function () {
     }
     if (task.state === 'path') {
       followPath(entity);
+    }
+
+    function inRange() {
+      return entity.pos.floored().distanceTo(task.target.pos.floored()) <= entityAttackRadius;
+    }
+    function switchToAttackState() {
+      task.state = 'attack';
+      entity.inputs.speed = 0;
     }
   }
 
@@ -450,12 +456,8 @@ window.Chem.onReady(function () {
       }
     }
     if (task.state === 'off') {
-      if (member.pos.distanceTo(task.pos) < crewChopRadius) {
-        task.state = 'plant';
-        member.inputs.plant = {
-          pos: task.pos,
-          type: task.plantType,
-        };
+      if (inRange()) {
+        switchToPlantState();
       } else {
         task.path = computePath(member.pos, task.pos, {
           endRadius: 1,
@@ -465,7 +467,23 @@ window.Chem.onReady(function () {
       }
     }
     if (task.state === 'path') {
-      followPath(member);
+      if (inRange()) {
+        switchToPlantState();
+      } else {
+        followPath(member);
+      }
+    }
+
+    function inRange() {
+      return member.pos.floored().distanceTo(task.pos.floored()) <= entityActionRadius;
+    }
+    function switchToPlantState() {
+      task.state = 'plant';
+      member.inputs.speed = 0;
+      member.inputs.plant = {
+        pos: task.pos,
+        type: task.plantType,
+      };
     }
   }
 
@@ -477,47 +495,69 @@ window.Chem.onReady(function () {
       return;
     }
     if (task.state === 'off') {
-      if (entity.pos.distanceTo(task.pos) < crewChopRadius) {
-        task.state = 'build';
-        entity.inputs.build = {
-          type: task.buildType,
-          pos: task.pos,
-        };
+      if (inRange()) {
+        switchToBuildState();
       } else {
         task.path = computePath(entity.pos, task.pos, {
-          endRadius: crewChopRadius,
+          endRadius: 1,
           human: entity.human,
         });
         task.state = 'path';
       }
     }
     if (task.state === 'path') {
-      followPath(entity);
+      if (inRange()) {
+        switchToBuildState();
+      } else {
+        followPath(entity);
+      }
+    }
+    function inRange() {
+      return entity.pos.floored().distanceTo(task.pos.floored()) <= entityActionRadius;
+    }
+    function switchToBuildState() {
+      task.state = 'build';
+      entity.inputs.speed = 0;
+      entity.inputs.build = {
+        type: task.buildType,
+        pos: task.pos,
+      };
     }
   }
 
-  function performChopTask(member) {
-    var task = member.tasks[0];
+  function performChopTask(entity) {
+    var task = entity.tasks[0];
+    var chopCell = grid.cell(task.pos);
+    if (!chopCell.plant) {
+      // mission accomplished
+      stopCurrentTask(entity);
+      return;
+    }
     if (task.state === 'off') {
-      if (member.pos.distanceTo(task.pos) < crewChopRadius) {
-        task.state = 'chop';
-        member.inputs.chop = task.pos;
+      if (inRange()) {
+        switchToChopState();
       } else {
-        task.path = computePath(member.pos, task.pos, {
+        task.path = computePath(entity.pos, task.pos, {
           endRadius: 1,
-          human: member.human,
+          human: entity.human,
         });
         task.state = 'path';
       }
-    }
-    if (task.state === 'chop') {
-      var chopCell = grid.cell(task.pos);
-      if (!chopCell.plant) {
-        // mission accomplished
-        stopCurrentTask(member);
-      }
     } else if (task.state === 'path') {
-      followPath(member);
+      if (inRange()) {
+        switchToChopState();
+      } else {
+        followPath(entity);
+      }
+    }
+
+    function inRange() {
+      return entity.pos.floored().distanceTo(task.pos.floored()) <= entityActionRadius;
+    }
+    function switchToChopState() {
+      task.state = 'chop';
+      entity.inputs.speed = 0;
+      entity.inputs.chop = task.pos;
     }
   }
 
@@ -929,7 +969,9 @@ window.Chem.onReady(function () {
     }
     function heuristic(node) {
       var terrainAtNode = grid.cell(node).terrain;
-      var damage = human ? terrainAtNode.damage : terrainAtNode.mutantDamage;
+      // using 0 instead of terrainAtNode.mutantDamage
+      // for mutants because we don't want mutants to be so careful
+      var damage = human ? terrainAtNode.damage : 0;
       var unsafePenalty = damage * -20000;
       return node.distanceTo(dest) + unsafePenalty;
     }
