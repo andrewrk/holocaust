@@ -428,7 +428,10 @@ window.Chem.onReady(function () {
         entity.inputs.direction = task.target.pos.minus(entity.pos).normalize();
         entity.inputs.speed = entity.maxSpeed;
       } else {
-        task.path = computePath(entity.pos, task.target.pos, entityAttackRadius);
+        task.path = computePath(entity.pos, task.target.pos, {
+          endRadius: entityAttackRadius,
+          human: entity.human,
+        });
         task.state = 'path';
       }
     }
@@ -454,7 +457,10 @@ window.Chem.onReady(function () {
           type: task.plantType,
         };
       } else {
-        task.path = computePath(member.pos, task.pos, 1);
+        task.path = computePath(member.pos, task.pos, {
+          endRadius: 1,
+          human: member.human,
+        });
         task.state = 'path';
       }
     }
@@ -478,7 +484,10 @@ window.Chem.onReady(function () {
           pos: task.pos,
         };
       } else {
-        task.path = computePath(entity.pos, task.pos, crewChopRadius);
+        task.path = computePath(entity.pos, task.pos, {
+          endRadius: crewChopRadius,
+          human: entity.human,
+        });
         task.state = 'path';
       }
     }
@@ -494,7 +503,10 @@ window.Chem.onReady(function () {
         task.state = 'chop';
         member.inputs.chop = task.pos;
       } else {
-        task.path = computePath(member.pos, task.pos, 1);
+        task.path = computePath(member.pos, task.pos, {
+          endRadius: 1,
+          human: member.human,
+        });
         task.state = 'path';
       }
     }
@@ -534,7 +546,9 @@ window.Chem.onReady(function () {
         stopCurrentTask(member);
         return;
       } else {
-        task.path = computePath(member.pos, task.pos);
+        task.path = computePath(member.pos, task.pos, {
+          human: member.human,
+        });
         task.state = 'path';
       }
     }
@@ -892,9 +906,11 @@ window.Chem.onReady(function () {
   }
 
 
-  function computePath(start, dest, endRadius) {
+  function computePath(start, dest, options) {
     start = start.floored();
     dest = dest.floored();
+    var endRadius = options.endRadius;
+    var human = options.human;
     var isEnd = endRadius == null ? exactIsEnd : isEndFromRadius;
     // compute path
     var results = aStar({
@@ -906,35 +922,16 @@ window.Chem.onReady(function () {
       timeout: 50,
     });
     if (results.path.length === 1) {
-      // compute unsafe path
-      results = aStar({
-        start: start,
-        isEnd: isEnd,
-        neighbor: createNeighborFn({unsafe: true}),
-        distance: pointDistance,
-        heuristic: unsafeHeuristic,
-        timeout: 50,
-      });
-      if (results.path.length === 1) {
-        // as a last ditch effort, make a beeline for dest
-        return [dest];
-      } else {
-        return results.path.slice(1);
-      }
+      // as a last ditch effort, make a beeline for dest
+      return [dest];
     } else {
       return results.path.slice(1);
     }
-    function createUnsafeHeuristicFn(member) {
-      return function (node) {
-      };
-    }
-    function unsafeHeuristic(node) {
-      var terrainAtNode = grid.cell(node).terrain;
-      var unsafePenalty = terrainAtNode.damage * -200;
-      return node.distanceTo(dest) + unsafePenalty;
-    }
     function heuristic(node) {
-      return node.distanceTo(dest);
+      var terrainAtNode = grid.cell(node).terrain;
+      var damage = human ? terrainAtNode.damage : terrainAtNode.mutantDamage;
+      var unsafePenalty = damage * -20000;
+      return node.distanceTo(dest) + unsafePenalty;
     }
     function exactIsEnd(node) {
       return node.equals(dest);
@@ -1005,7 +1002,6 @@ window.Chem.onReady(function () {
     options = options || {};
     var start = options.start;
     var maxDistance = options.maxDistance;
-    var unsafe = !!options.unsafe;
     var extraWalkableCells = options.extraWalkableCells;
     return function (node) {
       var cells = [];
@@ -1032,8 +1028,7 @@ window.Chem.onReady(function () {
         }
         var cell = grid.cell(pt);
         var terrain = cell.terrain;
-        if ((!extraWalkableCells || !extraWalkableCells(cell)) && (cell.entity || cell.plant || !terrain.walkable ||
-            (unsafe && (terrain === Grid.terrains.fatal)) || (!unsafe && !terrain.safe)))
+        if ((!extraWalkableCells || !extraWalkableCells(cell)) && (cell.entity || cell.plant || !terrain.walkable))
         {
           return false;
         }
