@@ -267,6 +267,9 @@ window.Chem.onReady(function () {
     this.plant = new Plant(this, type);
     this.plant.growing = 1;
   }
+  Cell.prototype.empty = function() {
+    return this.terrain.walkable && !this.plant && !this.building && !this.entity;
+  };
   function Plant(cell, type) {
     this.id = nextId();
     this.type = type;

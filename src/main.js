@@ -63,6 +63,12 @@ window.Chem.onReady(function () {
     build: performBuildTask,
     attack: performAttackTask,
   };
+  var buildingResources = {
+    turret: {
+      seed: 10,
+      food: 4,
+    },
+  };
 
   var grid = Grid.create(engine.size.divBy(cellSize).floor());
 
@@ -74,14 +80,17 @@ window.Chem.onReady(function () {
   var controlBoxSize = v(miniMapPos.x, engine.size.y - controlBoxPos.y);
   var miniMapImage;
   var updateMiniMapTimer = null;
-  var seedCount = 0;
+  var resources = {
+    seed: 0,
+    food: 0,
+  };
   var seedResourceImage = Chem.getImage('saplingbutton');
-  var foodCount = 0;
   var foodResourceImage = Chem.getImage('foodbutton');
   var anyCrewSelected = false;
   var selectedCrewOption = 0;
   var growingPlants = {};
   var partiallyChoppedPlants = {};
+  var buildings = {};
   var mutants = {};
   var mutantSpawnInterval = 1000;
   var nextMutantSpawn = 0;
@@ -109,6 +118,9 @@ window.Chem.onReady(function () {
         setEverythingExplored();
       } else if (button === Chem.Button.Key_S) {
         spawnMutantAt(grid.cell(fromScreen(engine.mouse_pos).floored()));
+      } else if (button === Chem.Button.Key_Z) {
+        resources.food += 100;
+        resources.seed += 100;
       }
     }
 
@@ -209,6 +221,8 @@ window.Chem.onReady(function () {
         onChop(entity.inputs.chop);
       } else if (entity.inputs.plant) {
         onPlant(entity.inputs.plant);
+      } else if (entity.inputs.build) {
+        onBuild(entity.inputs.build);
       }
 
       // AI
@@ -251,16 +265,50 @@ window.Chem.onReady(function () {
       function onPlant(plantInput) {
         if (plantInput.pos.floored().distanceTo(entity.pos.floored()) <= entityActionRadius) {
           var plantCell = grid.cell(plantInput.pos);
-          if (plantCell.terrain.plantable && seedCount > 0 && !plantCell.plant) {
+          if (plantCell.terrain.plantable && resources.seed > 0 && plantCell.empty()) {
             plantCell.setGrowingPlant(plantInput.type);
             growingPlants[plantCell.plant.id] = plantCell.plant;
-            seedCount -= 1;
+            resources.seed -= 1;
           }
         }
+      }
+      function onBuild(buildInput) {
+        if (buildInput.pos.floored().distanceTo(entity.pos.floored()) > entityActionRadius) return;
+        var buildCell = grid.cell(buildInput.pos);
+        if (! buildCell.terrain.buildable) return;
+        if (! buildCell.empty()) return;
+        var resourcesDelta = buildingResources[buildInput.type];
+        if (! canAfford(resourcesDelta)) return;
+        useResources(resourcesDelta);
+        buildCell.building = {
+          id: nextId(),
+          health: 1,
+          type: buildInput.type,
+          sprite: new Chem.Sprite('turret', {batch: batch}),
+          direction: v(1, 0),
+          cooldown: 1,
+          cooldownAmt: 0.05,
+          cell: buildCell,
+        };
+        buildings[buildCell.building.id] = buildCell.building;
       }
     }
   }
 
+  function useResources(resourceDelta) {
+    for (var name in resourceDelta) {
+      resources[name] -= resourceDelta[name];
+    }
+  }
+
+  function canAfford(resourceDelta) {
+    for (var name in resourceDelta) {
+      if (resources[name] - resourceDelta[name] < 0) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   function computeAnyCrewSelected() {
     anyCrewSelected = false;
@@ -305,7 +353,7 @@ window.Chem.onReady(function () {
     // iterate until we find a spawnable cell or end up back at start
     while(true) {
       var cell = grid.cell(it);
-      if (cell.terrain.spawnable && ! cell.plant && ! cell.entity) {
+      if (cell.terrain.spawnable && cell.empty()) {
         spawnMutantAt(cell);
         return;
       }
@@ -360,7 +408,7 @@ window.Chem.onReady(function () {
         computeOxygenation(plant.cell.pos.offset(x, y));
       }
     }
-    seedCount += 2;
+    resources.seed += 2;
     updateMiniMap();
   }
 
@@ -400,12 +448,12 @@ window.Chem.onReady(function () {
     var cell = grid.cell(oldPos);
     if (! newPosFloored.equals(oldPos)) {
       var newCell = grid.cell(newPosFloored);
-      if (newCell.entity == null && newCell.terrain.walkable && !newCell.plant) {
+      if (newCell.empty()) {
         cell.entity = null;
         entity.pos = newPos;
         newCell.entity = entity;
         if (entity.human && newCell.food) {
-          foodCount += newCell.food;
+          resources.food += newCell.food;
           newCell.food = 0;
         }
       }
@@ -420,66 +468,19 @@ window.Chem.onReady(function () {
       // task complete
       stopCurrentTask(entity);
       return;
-    }
-    entity.inputs.attack = task.target;
-    if (task.state === 'off') {
-      if (inRange()) {
-        switchToAttackState();
-      } else {
-        task.path = computePath(entity.pos, task.target.pos, {
-          endRadius: entityAttackRadius,
-          human: entity.human,
-        });
-        task.state = 'path';
-      }
-    }
-    if (task.state === 'path') {
-      followPath(entity);
-    }
-
-    function inRange() {
-      return entity.pos.floored().distanceTo(task.target.pos.floored()) <= entityAttackRadius;
-    }
-    function switchToAttackState() {
+    } else if (getWithinRange(entity, task.target.pos, entityAttackRadius)) {
+      entity.inputs.attack = task.target;
       task.state = 'attack';
-      entity.inputs.speed = 0;
     }
   }
 
   function performPlantTask(member) {
     var task = member.tasks[0];
-    if (task.state === 'off' || task.state === 'plant') {
-      if (grid.cell(task.pos).plant) {
-        // nothing to do
-        stopCurrentTask(member);
-        return;
-      }
-    }
-    if (task.state === 'off') {
-      if (inRange()) {
-        switchToPlantState();
-      } else {
-        task.path = computePath(member.pos, task.pos, {
-          endRadius: 1,
-          human: member.human,
-        });
-        task.state = 'path';
-      }
-    }
-    if (task.state === 'path') {
-      if (inRange()) {
-        switchToPlantState();
-      } else {
-        followPath(member);
-      }
-    }
-
-    function inRange() {
-      return member.pos.floored().distanceTo(task.pos.floored()) <= entityActionRadius;
-    }
-    function switchToPlantState() {
+    if (grid.cell(task.pos).plant) {
+      // nothing to do
+      stopCurrentTask(member);
+    } else if (getWithinRange(member, task.pos, entityActionRadius)) {
       task.state = 'plant';
-      member.inputs.speed = 0;
       member.inputs.plant = {
         pos: task.pos,
         type: task.plantType,
@@ -487,37 +488,39 @@ window.Chem.onReady(function () {
     }
   }
 
+  function getWithinRange(entity, dest, radius) {
+    var task = entity.tasks[0];
+    var dist = entity.pos.floored().distanceTo(dest.floored());
+    if (dist === 0 && task.state !== 'path') {
+      // find a safe neighbor to go to - we're in our own way.
+      var neighbor = closestSafeNeighbor(entity);
+      if (neighbor) {
+        task.path = [neighbor];
+        task.state = 'path';
+      } else {
+        task.state = 'off';
+      }
+    } else if (dist <= radius && dist !== 0) {
+      entity.inputs.speed = 0;
+      return true;
+    } else if (task.state === 'path') {
+      followPath(entity);
+    } else {
+      task.path = computePath(entity.pos, dest, {
+        endRadius: radius,
+        human: entity.human,
+      });
+      task.state = 'path';
+    }
+    return false;
+  }
+
   function performBuildTask(entity) {
     var task = entity.tasks[0];
-    var cell = grid.cell(task.pos);
-    if (cell.building) {
+    if (grid.cell(task.pos).building) {
       stopCurrentTask(entity);
-      return;
-    }
-    if (task.state === 'off') {
-      if (inRange()) {
-        switchToBuildState();
-      } else {
-        task.path = computePath(entity.pos, task.pos, {
-          endRadius: 1,
-          human: entity.human,
-        });
-        task.state = 'path';
-      }
-    }
-    if (task.state === 'path') {
-      if (inRange()) {
-        switchToBuildState();
-      } else {
-        followPath(entity);
-      }
-    }
-    function inRange() {
-      return entity.pos.floored().distanceTo(task.pos.floored()) <= entityActionRadius;
-    }
-    function switchToBuildState() {
+    } else if (getWithinRange(entity, task.pos, entityActionRadius)) {
       task.state = 'build';
-      entity.inputs.speed = 0;
       entity.inputs.build = {
         type: task.buildType,
         pos: task.pos,
@@ -527,36 +530,11 @@ window.Chem.onReady(function () {
 
   function performChopTask(entity) {
     var task = entity.tasks[0];
-    var chopCell = grid.cell(task.pos);
-    if (!chopCell.plant) {
-      // mission accomplished
+    if (!grid.cell(task.pos).plant) {
       stopCurrentTask(entity);
       return;
-    }
-    if (task.state === 'off') {
-      if (inRange()) {
-        switchToChopState();
-      } else {
-        task.path = computePath(entity.pos, task.pos, {
-          endRadius: 1,
-          human: entity.human,
-        });
-        task.state = 'path';
-      }
-    } else if (task.state === 'path') {
-      if (inRange()) {
-        switchToChopState();
-      } else {
-        followPath(entity);
-      }
-    }
-
-    function inRange() {
-      return entity.pos.floored().distanceTo(task.pos.floored()) <= entityActionRadius;
-    }
-    function switchToChopState() {
+    } else if (getWithinRange(entity, task.pos, entityActionRadius)) {
       task.state = 'chop';
-      entity.inputs.speed = 0;
       entity.inputs.chop = task.pos;
     }
   }
@@ -650,6 +628,11 @@ window.Chem.onReady(function () {
       mutant.sprite.pos = toScreen(mutant.pos);
       mutant.sprite.alpha = visibilityAt(mutant.pos);
     }
+    for (id in buildings) {
+      var building = buildings[id];
+      building.sprite.pos = toScreen(building.cell.pos.offset(0.5, 0.5));
+      building.sprite.rotation = building.direction.angle();
+    }
     engine.draw(batch);
 
     // draw names and health
@@ -704,12 +687,12 @@ window.Chem.onReady(function () {
     context.drawImage(seedResourceImage, 10, 10);
     context.fillStyle = "#000000";
     context.font = "normal 16px Arial";
-    context.fillText("" + seedCount, 48, 32);
+    context.fillText("" + resources.seed, 48, 32);
     // food
     context.drawImage(foodResourceImage, 90, 10);
     context.fillStyle = "#000000";
     context.font = "normal 16px Arial";
-    context.fillText("" + foodCount, 128, 32);
+    context.fillText("" + resources.food, 128, 32);
 
     // control box
     if (anyCrewSelected) {
@@ -1040,6 +1023,27 @@ window.Chem.onReady(function () {
     };
   }
 
+  function closestSafeNeighbor(entity) {
+    var pt = entity.pos.floored();
+    var neighbors = createNeighborFn({})(pt);
+    var best = null;
+    var bestDist = null;
+    neighbors.forEach(function(neighbor) {
+      var cell = grid.cell(neighbor);
+      var damage = entity.human ? cell.terrain.damage : cell.terrain.mutantDamage;
+      if (damage < 0) return;
+      var dist = neighbor.distanceTo(entity.pos);
+      if (best == null || dist < bestDist) {
+        bestDist = dist;
+        best = neighbor;
+      }
+    });
+    return best;
+  }
+
+  function safeNeighbors(pt) {
+  }
+
   function createNeighborFn(options) {
     options = options || {};
     var start = options.start;
@@ -1070,7 +1074,7 @@ window.Chem.onReady(function () {
         }
         var cell = grid.cell(pt);
         var terrain = cell.terrain;
-        if ((!extraWalkableCells || !extraWalkableCells(cell)) && (cell.entity || cell.plant || !terrain.walkable))
+        if ((!extraWalkableCells || !extraWalkableCells(cell)) && ! cell.empty())
         {
           return false;
         }
