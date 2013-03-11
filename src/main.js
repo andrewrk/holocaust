@@ -178,10 +178,20 @@ window.Chem.onReady(function () {
     }
     for (id in bullets) {
       var bullet = bullets[id];
-      bullet.pos.add(bullet.vel);
-      if (bullet.pos.distanceTo(bullet.start) > bullet.range) {
-        delete bullets[bullet.id];
+      var oldCell = grid.cell(bullet.pos.floored());
+      var newPos = bullet.pos.plus(bullet.vel.scaled(dx));
+      var newCell = grid.cell(newPos.floored());
+      if (oldCell !== newCell) {
+        if (bulletHitCell(newCell, bullet)) {
+          delete bullets[bullet.id];
+          continue;
+        }
       }
+      if (newPos.distanceTo(bullet.start) > bullet.range) {
+        delete bullets[bullet.id];
+        continue;
+      }
+      bullet.pos = newPos;
     }
 
     nextMutantSpawn -= dx;
@@ -309,6 +319,15 @@ window.Chem.onReady(function () {
         };
         buildings[buildCell.building.id] = buildCell.building;
       }
+    }
+  }
+
+  function bulletHitCell(cell, bullet) {
+    if (cell.entity) {
+      changeEntityHealth(cell.entity, bullet.damage);
+      return true;
+    } else {
+      return false;
     }
   }
 
@@ -1128,13 +1147,14 @@ window.Chem.onReady(function () {
     }
     return results;
   }
-  function fireBullet(pos, vel) {
+  function fireBullet(pos, vel, range) {
     var bullet = {
       id: nextId(),
       start: pos.clone(),
       pos: pos.clone(),
       vel: vel,
-      range: 4,
+      range: range,
+      damage: -0.12,
     };
     bullets[bullet.id] = bullet;
   }
@@ -1149,7 +1169,7 @@ window.Chem.onReady(function () {
       turret.direction = turret.target.pos.minus(center).normalize();
       // if we can shoot, shoot
       if (turret.cooldown <= 0) {
-        fireBullet(center, turret.direction.scaled(0.2));
+        fireBullet(center, turret.direction.scaled(0.2), turret.losRadius);
         turret.cooldown = 1;
       }
     }
