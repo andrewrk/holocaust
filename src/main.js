@@ -25,6 +25,7 @@ window.Chem.onReady(function () {
   var shrubImage = Chem.getImage('shrub');
   var axeImage = Chem.getImage('axe');
   var swordImage = Chem.getImage('sword');
+  var appleImage = Chem.getImage('apple');
   var growingAnimation = Chem.animations.growing;
   var plantTypes = {
     shrub: {
@@ -390,6 +391,10 @@ window.Chem.onReady(function () {
         cell.entity = null;
         entity.pos = newPos;
         newCell.entity = entity;
+        if (entity.human && newCell.food) {
+          foodCount += newCell.food;
+          newCell.food = 0;
+        }
       }
     } else {
       entity.pos = newPos;
@@ -538,6 +543,8 @@ window.Chem.onReady(function () {
           } else {
             context.drawImage(plantImg, pos.x, pos.y);
           }
+        } else if (cell.food) {
+          context.drawImage(appleImage, pos.x, pos.y);
         }
       }
     }
@@ -792,6 +799,8 @@ window.Chem.onReady(function () {
     delete entity.entities[entity.id];
     var cell = grid.cell(entity.pos.floored());
     cell.entity = null;
+    // random food drop
+    cell.food = Math.floor(Math.random() * 2);
   }
 
   function toScreen(vec) {

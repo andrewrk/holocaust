@@ -86,6 +86,9 @@ exports.spritesheet = {
     tree: {
       anchor: 'topleft',
     },
+    apple: {
+      anchor: 'topleft',
+    },
     turret: {},
   }
 };
