@@ -26,6 +26,7 @@ window.Chem.onReady(function () {
   var axeImage = Chem.getImage('axe');
   var swordImage = Chem.getImage('sword');
   var appleImage = Chem.getImage('apple');
+  var turretImage = Chem.getImage('turret');
   var growingAnimation = Chem.animations.growing;
   var plantTypes = {
     shrub: {
@@ -47,11 +48,19 @@ window.Chem.onReady(function () {
       help: "Plant a shrub.",
       image: shrubImage,
     },
+    {
+      fn: commandToBuildTurret,
+      key: Chem.Button.Key_3,
+      keyText: "3",
+      help: "Build a turret.",
+      image: turretImage,
+    },
   ];
   var taskFns = {
     walk: performWalkTask,
     chop: performChopTask,
     plant: performPlantTask,
+    build: performBuildTask,
     attack: performAttackTask,
   };
 
@@ -154,11 +163,7 @@ window.Chem.onReady(function () {
       spawnMutant();
     }
 
-    // compute anyCrewSelected
-    anyCrewSelected = false;
-    for (id in crew) {
-      anyCrewSelected = anyCrewSelected || crew[id].selected;
-    }
+    computeAnyCrewSelected();
 
     for (id in mutants) {
       onEntityUpdate(mutants[id]);
@@ -253,6 +258,14 @@ window.Chem.onReady(function () {
           }
         }
       }
+    }
+  }
+
+
+  function computeAnyCrewSelected() {
+    anyCrewSelected = false;
+    for (var id in crew) {
+      anyCrewSelected = anyCrewSelected || crew[id].selected;
     }
   }
 
@@ -447,6 +460,30 @@ window.Chem.onReady(function () {
     }
     if (task.state === 'path') {
       followPath(member);
+    }
+  }
+
+  function performBuildTask(entity) {
+    var task = entity.tasks[0];
+    var cell = grid.cell(task.pos);
+    if (cell.building) {
+      stopCurrentTask(entity);
+      return;
+    }
+    if (task.state === 'off') {
+      if (entity.pos.distanceTo(task.pos) < crewChopRadius) {
+        task.state = 'build';
+        entity.inputs.build = {
+          type: task.buildType,
+          pos: task.pos,
+        };
+      } else {
+        task.path = computePath(entity.pos, task.pos, crewChopRadius);
+        task.state = 'path';
+      }
+    }
+    if (task.state === 'path') {
+      followPath(entity);
     }
   }
 
@@ -718,6 +755,19 @@ window.Chem.onReady(function () {
         pos: posFloored,
         state: 'off',
         plantType: 'shrub',
+      });
+    }
+  }
+
+  function commandToBuildTurret(member, pos, queue) {
+    var posFloored = pos.floored();
+    var cell = grid.cell(posFloored);
+    if (cell.terrain.buildable) {
+      assignTask(member, queue, {
+        name: 'build',
+        pos: posFloored,
+        state: 'off',
+        buildType: 'turret',
       });
     }
   }
