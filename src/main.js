@@ -94,6 +94,7 @@ window.Chem.onReady(function () {
   var growingPlants = {};
   var partiallyChoppedPlants = {};
   var buildings = {};
+  var bullets = {};
   var mutants = {};
   var mutantSpawnInterval = 1000;
   var nextMutantSpawn = 0;
@@ -173,7 +174,14 @@ window.Chem.onReady(function () {
     }
     for (id in buildings) {
       var building = buildings[id];
-      buildingOnUpdateFns[building.type](building);
+      buildingOnUpdateFns[building.type](building, dx);
+    }
+    for (id in bullets) {
+      var bullet = bullets[id];
+      bullet.pos.add(bullet.vel);
+      if (bullet.pos.distanceTo(bullet.start) > bullet.range) {
+        delete bullets[bullet.id];
+      }
     }
 
     nextMutantSpawn -= dx;
@@ -595,11 +603,12 @@ window.Chem.onReady(function () {
     if (end.y >= grid.size.y) end.y = grid.size.y - 1;
     var it = v();
     var size = sizeToScreen(v(1, 1));
+    var pos;
     for (it.y = start.y; it.y < end.y; it.y += 1) {
       var row = grid.cells[it.y];
       for (it.x = start.x; it.x < end.x; it.x += 1) {
         if (! row[it.x].explored) continue;
-        var pos = toScreen(it);
+        pos = toScreen(it);
         var cell = row[it.x];
         if (cell.terrain.texture) {
           context.drawImage(cell.terrain.texture, pos.x, pos.y);
@@ -648,30 +657,17 @@ window.Chem.onReady(function () {
     context.save();
     context.textAlign = 'center';
     var healthBarSize = v(32, 4);
-    function drawEntityHealth(entity) {
-      context.globalAlpha = 0.8 * entity.sprite.alpha;
-      var start = entity.sprite.pos.minus(healthBarSize.scaled(0.5)).floor();
-      context.fillStyle = '#000000';
-      context.fillRect(start.x - 1, start.y - entity.sprite.size.y - 1, healthBarSize.x + 2, healthBarSize.y + 2);
-      context.fillStyle = '#009413';
-      context.fillRect(start.x, start.y - entity.sprite.size.y, healthBarSize.x * entity.health, healthBarSize.y);
-    }
-    function drawEntities(entities) {
-      for (var id in entities) {
-        var entity = entities[id];
-        if (entity.selected) {
-          context.fillStyle = '#ffffff';
-          context.fillText(entity.name,
-              entity.sprite.pos.x, entity.sprite.pos.y - entity.sprite.size.y - 5);
-        }
-        if (entity.selected || entity.health !== 1) {
-          drawEntityHealth(entity);
-        }
-      }
-    }
     drawEntities(crew);
     drawEntities(mutants);
     context.restore();
+
+    // bullets
+    for (id in bullets) {
+      var bullet = bullets[id];
+      pos = toScreen(bullet.pos);
+      context.fillStyle = '#000000';
+      context.fillRect(pos.x, pos.y, 2, 2);
+    }
 
     // highlight the square you're mouse overing
     if (anyCrewSelected) {
@@ -736,6 +732,28 @@ window.Chem.onReady(function () {
     // draw a little fps counter in the corner
     context.fillStyle = '#ffffff'
     engine.drawFps();
+
+    function drawEntityHealth(entity) {
+      context.globalAlpha = 0.8 * entity.sprite.alpha;
+      var start = entity.sprite.pos.minus(healthBarSize.scaled(0.5)).floor();
+      context.fillStyle = '#000000';
+      context.fillRect(start.x - 1, start.y - entity.sprite.size.y - 1, healthBarSize.x + 2, healthBarSize.y + 2);
+      context.fillStyle = '#009413';
+      context.fillRect(start.x, start.y - entity.sprite.size.y, healthBarSize.x * entity.health, healthBarSize.y);
+    }
+    function drawEntities(entities) {
+      for (var id in entities) {
+        var entity = entities[id];
+        if (entity.selected) {
+          context.fillStyle = '#ffffff';
+          context.fillText(entity.name,
+              entity.sprite.pos.x, entity.sprite.pos.y - entity.sprite.size.y - 5);
+        }
+        if (entity.selected || entity.health !== 1) {
+          drawEntityHealth(entity);
+        }
+      }
+    }
   }
 
   function setEverythingExplored() {
@@ -1110,7 +1128,17 @@ window.Chem.onReady(function () {
     }
     return results;
   }
-  function turretOnUpdate(turret) {
+  function fireBullet(pos, vel) {
+    var bullet = {
+      id: nextId(),
+      start: pos.clone(),
+      pos: pos.clone(),
+      vel: vel,
+      range: 4,
+    };
+    bullets[bullet.id] = bullet;
+  }
+  function turretOnUpdate(turret, dx) {
     var center = turret.cell.pos.offset(0.5, 0.5);
     if (turret.target && turret.target.deleted) turret.target = null;
     if (turret.target == null || targetOutOfRange()) {
@@ -1119,7 +1147,14 @@ window.Chem.onReady(function () {
     if (turret.target != null) {
       // aim at target
       turret.direction = turret.target.pos.minus(center).normalize();
+      // if we can shoot, shoot
+      if (turret.cooldown <= 0) {
+        fireBullet(center, turret.direction.scaled(0.2));
+        turret.cooldown = 1;
+      }
     }
+    turret.cooldown -= turret.cooldownAmt * dx;
+    if (turret.cooldown <= 0) turret.cooldown = 0;
 
     function pickClosestTarget() {
       var start = turret.cell.pos.offset(-turret.losRadius, -turret.losRadius);
