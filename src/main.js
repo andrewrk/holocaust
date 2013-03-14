@@ -21,6 +21,7 @@ window.Chem.onReady(function () {
   var entityAttackRadius = 1;
   var crewMaxSpeed = 0.1;
   var mutantMaxSpeed = 0.05;
+  var walkImage = Chem.getImage('walkicon');
   var saplingImage = Chem.getImage('sapling');
   var shrubImage = Chem.getImage('shrub');
   var axeImage = Chem.getImage('axe');
@@ -35,21 +36,21 @@ window.Chem.onReady(function () {
   };
   var crewOptions = [
     {
-      fn: commandToWalk,
+      getTask: getWalkTask,
       key: Chem.Button.Key_1,
       keyText: "1",
       help: "Walk to the destination.",
-      image: Chem.getImage('walkicon'),
+      image: walkImage,
     },
     {
-      fn: commandToPlantShrub,
+      getTask: getPlantShrubTask,
       key: Chem.Button.Key_2,
       keyText: "2",
       help: "Plant a shrub.",
       image: shrubImage,
     },
     {
-      fn: commandToBuildTurret,
+      getTask: getBuildTurrentTask,
       key: Chem.Button.Key_3,
       keyText: "3",
       help: "Build a turret.",
@@ -689,22 +690,37 @@ window.Chem.onReady(function () {
     }
 
     // highlight the square you're mouse overing
+    var task;
     if (anyCrewSelected) {
       var mouseCellPos = fromScreen(engine.mouse_pos).floor();
       if (inGrid(mouseCellPos)) {
         var mouseCell = grid.cell(mouseCellPos);
         var screenMouseCellPos = toScreen(mouseCellPos);
-        var img = crewOptions[selectedCrewOption].image;
-        if (selectedCrewOption === 0) {
-          if (mouseCell.plant) {
-            img = axeImage;
-          } else if (mouseCell.entity && !mouseCell.entity.human) {
-            img = swordImage;
-          }
+        task = crewOptions[selectedCrewOption].getTask(mouseCellPos);
+        if (task) {
+          var img = task.image;
+          context.save();
+          context.globalAlpha = 0.7;
+          context.drawImage(img, screenMouseCellPos.x, screenMouseCellPos.y);
+          context.restore();
         }
-        context.drawImage(img, screenMouseCellPos.x, screenMouseCellPos.y);
       }
     }
+
+    // draw all the active tasks
+    context.save();
+    context.globalAlpha = 0.6;
+    for (id in crew) {
+      member = crew[id];
+      for (var i = 0; i < member.tasks.length; i++) {
+        task = member.tasks[i];
+        if (task.pos) {
+          screenPos = toScreen(task.pos.floored());
+          context.drawImage(task.image, screenPos.x, screenPos.y);
+        }
+      }
+    }
+    context.restore();
 
     // resource counts
     // seed
@@ -749,7 +765,7 @@ window.Chem.onReady(function () {
         miniMapBoxSize.x, miniMapBoxSize.y);
 
     // draw a little fps counter in the corner
-    context.fillStyle = '#ffffff'
+    context.fillStyle = '#ffffff';
     engine.drawFps();
 
     function drawEntityHealth(entity) {
@@ -800,59 +816,72 @@ window.Chem.onReady(function () {
     var command = crewOptions[selectedCrewOption];
     for (var id in crew) {
       var member = crew[id];
-      if (member.selected) command.fn(member, pos, shift);
+      if (member.selected) {
+        var task = command.getTask(pos);
+        if (task) {
+          assignTask(member, shift, task);
+        }
+      }
     }
   }
 
-  function commandToWalk(member, pos, queue) {
+  function getWalkTask(pos) {
     var posFloored = pos.floored();
     pos = posFloored.offset(0.5, 0.5);
     var cell = grid.cell(posFloored);
     if (cell.plant) {
-      assignTask(member, queue, {
+      return {
         name: 'chop',
+        image: axeImage,
         pos: posFloored,
         state: 'off',
-      });
+      };
     } else if (cell.entity && !cell.entity.human) {
-      assignTask(member, queue, {
+      return {
         name: 'attack',
+        image: swordImage,
         target: cell.entity,
         state: 'off',
-      });
+      };
     } else if (cell.terrain.walkable) {
-      assignTask(member, queue, {
+      return {
         name: 'walk',
+        image: walkImage,
         pos: pos.clone(),
         state: 'off',
-      });
+      };
     }
+    return null;
   }
 
-  function commandToPlantShrub(member, pos, queue) {
+  function getPlantShrubTask(pos) {
     var posFloored = pos.floored();
     var cell = grid.cell(posFloored);
     if (cell.terrain.plantable) {
-      assignTask(member, queue, {
+      return {
         name: 'plant',
+        image: shrubImage,
         pos: posFloored,
         state: 'off',
         plantType: 'shrub',
-      });
+      };
     }
+    return null;
   }
 
-  function commandToBuildTurret(member, pos, queue) {
+  function getBuildTurrentTask(pos) {
     var posFloored = pos.floored();
     var cell = grid.cell(posFloored);
     if (cell.terrain.buildable) {
-      assignTask(member, queue, {
+      return {
         name: 'build',
+        image: turretImage,
         pos: posFloored,
         state: 'off',
         buildType: 'turret',
-      });
+      };
     }
+    return null;
   }
 
   function stopCurrentTask(entity) {
