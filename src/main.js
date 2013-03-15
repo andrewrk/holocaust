@@ -140,14 +140,16 @@ window.Chem.onReady(function () {
   }
 
   function onUpdate(dt, dx) {
-    if (engine.buttonState(Chem.Button.Key_Left)) {
+    if (engine.buttonState(Chem.Button.Key_Left) || engine.buttonState(Chem.Button.Key_A)) {
       scroll.x -= 10 * dx;
-    } else if (engine.buttonState(Chem.Button.Key_Right)) {
+    }
+    if (engine.buttonState(Chem.Button.Key_Right) || engine.buttonState(Chem.Button.Key_D)) {
       scroll.x += 10 * dx;
     }
-    if (engine.buttonState(Chem.Button.Key_Up)) {
+    if (engine.buttonState(Chem.Button.Key_Up) || engine.buttonState(Chem.Button.Key_W)) {
       scroll.y -= 10 * dx;
-    } else if (engine.buttonState(Chem.Button.Key_Down)) {
+    }
+    if (engine.buttonState(Chem.Button.Key_Down) || engine.buttonState(Chem.Button.Key_S)) {
       scroll.y += 10 * dx;
     }
     if (engine.buttonState(Chem.Button.Mouse_Left) && inside(engine.mouse_pos, miniMapPos, grid.size)) {
