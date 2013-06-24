@@ -1,14 +1,11 @@
-//depend "chem"
-//depend "astar"
-//depend "grid"
-window.Chem.onReady(function () {
-  var Chem = window.Chem
-    , aStar = window.aStar
-    , Grid = window.Holocaust.Grid
-    , v = Chem.Vec2d
+var chem = require('chem');
+chem.onReady(function () {
+  var aStar = require('a-star')
+    , Grid = require('./grid')
+    , v = chem.vec2d
     , canvas = document.getElementById("game")
-    , engine = new Chem.Engine(canvas)
-    , batch = new Chem.Batch()
+    , engine = new chem.Engine(canvas)
+    , batch = new chem.Batch()
 
   engine.setSize(v(1067, 600));
 
@@ -21,14 +18,14 @@ window.Chem.onReady(function () {
   var entityAttackRadius = 1;
   var crewMaxSpeed = 0.1;
   var mutantMaxSpeed = 0.05;
-  var walkImage = Chem.getImage('walkicon');
-  var saplingImage = Chem.getImage('sapling');
-  var shrubImage = Chem.getImage('shrub');
-  var axeImage = Chem.getImage('axe');
-  var swordImage = Chem.getImage('sword');
-  var appleImage = Chem.getImage('apple');
-  var turretImage = Chem.getImage('turret');
-  var growingAnimation = Chem.animations.growing;
+  var walkImage = chem.resources.getImage('walkicon');
+  var saplingImage = chem.resources.getImage('sapling');
+  var shrubImage = chem.resources.getImage('shrub');
+  var axeImage = chem.resources.getImage('axe');
+  var swordImage = chem.resources.getImage('sword');
+  var appleImage = chem.resources.getImage('apple');
+  var turretImage = chem.resources.getImage('turret');
+  var growingAnimation = chem.resources.animations.growing;
   var plantTypes = {
     shrub: {
       image: shrubImage,
@@ -37,21 +34,21 @@ window.Chem.onReady(function () {
   var crewOptions = [
     {
       getTask: getWalkTask,
-      key: Chem.Button.Key_1,
+      key: chem.button.Key1,
       keyText: "1",
       help: "Walk to the destination.",
       image: walkImage,
     },
     {
       getTask: getPlantShrubTask,
-      key: Chem.Button.Key_2,
+      key: chem.button.Key2,
       keyText: "2",
       help: "Plant a shrub.",
       image: shrubImage,
     },
     {
       getTask: getBuildTurrentTask,
-      key: Chem.Button.Key_3,
+      key: chem.button.Key3,
       keyText: "3",
       help: "Build a turret.",
       image: turretImage,
@@ -88,8 +85,8 @@ window.Chem.onReady(function () {
     seed: 0,
     food: 0,
   };
-  var seedResourceImage = Chem.getImage('saplingbutton');
-  var foodResourceImage = Chem.getImage('foodbutton');
+  var seedResourceImage = chem.resources.getImage('saplingbutton');
+  var foodResourceImage = chem.resources.getImage('foodbutton');
   var anyCrewSelected = false;
   var selectedCrewOption = 0;
   var growingPlants = {};
@@ -111,19 +108,19 @@ window.Chem.onReady(function () {
   canvas.focus();
 
   function onButtonDown(button) {
-    if (button === Chem.Button.Mouse_Left) {
-      if (inside(engine.mouse_pos, miniMapPos, grid.size)) return;
+    if (button === chem.button.MouseLeft) {
+      if (inside(engine.mousePos, miniMapPos, grid.size)) return;
       onMapLeftClick();
-    } else if (button === Chem.Button.Mouse_Right) {
-      if (inside(engine.mouse_pos, miniMapPos, grid.size)) return;
+    } else if (button === chem.button.MouseRight) {
+      if (inside(engine.mousePos, miniMapPos, grid.size)) return;
       onMapRightClick();
-    } else if (engine.buttonState(Chem.Button.Mouse_Left)) {
+    } else if (engine.buttonState(chem.button.MouseLeft)) {
       // cheatz!!
-      if (button === Chem.Button.Key_E) {
+      if (button === chem.button.KeyE) {
         setEverythingExplored();
-      } else if (button === Chem.Button.Key_S) {
-        spawnMutantAt(grid.cell(fromScreen(engine.mouse_pos).floored()));
-      } else if (button === Chem.Button.Key_Z) {
+      } else if (button === chem.button.KeyS) {
+        spawnMutantAt(grid.cell(fromScreen(engine.mousePos).floored()));
+      } else if (button === chem.button.KeyZ) {
         resources.food += 100;
         resources.seed += 100;
       }
@@ -140,20 +137,20 @@ window.Chem.onReady(function () {
   }
 
   function onUpdate(dt, dx) {
-    if (engine.buttonState(Chem.Button.Key_Left) || engine.buttonState(Chem.Button.Key_A)) {
+    if (engine.buttonState(chem.button.KeyLeft) || engine.buttonState(chem.button.KeyA)) {
       scroll.x -= 10 * dx;
     }
-    if (engine.buttonState(Chem.Button.Key_Right) || engine.buttonState(Chem.Button.Key_D)) {
+    if (engine.buttonState(chem.button.KeyRight) || engine.buttonState(chem.button.KeyD)) {
       scroll.x += 10 * dx;
     }
-    if (engine.buttonState(Chem.Button.Key_Up) || engine.buttonState(Chem.Button.Key_W)) {
+    if (engine.buttonState(chem.button.KeyUp) || engine.buttonState(chem.button.KeyW)) {
       scroll.y -= 10 * dx;
     }
-    if (engine.buttonState(Chem.Button.Key_Down) || engine.buttonState(Chem.Button.Key_S)) {
+    if (engine.buttonState(chem.button.KeyDown) || engine.buttonState(chem.button.KeyS)) {
       scroll.y += 10 * dx;
     }
-    if (engine.buttonState(Chem.Button.Mouse_Left) && inside(engine.mouse_pos, miniMapPos, grid.size)) {
-      scroll = engine.mouse_pos.minus(miniMapPos).minus(miniMapBoxSize.scaled(0.5)).times(cellSize).times(zoom);
+    if (engine.buttonState(chem.button.MouseLeft) && inside(engine.mousePos, miniMapPos, grid.size)) {
+      scroll = engine.mousePos.minus(miniMapPos).minus(miniMapBoxSize.scaled(0.5)).times(cellSize).times(zoom);
     }
     scroll.floor();
 
@@ -190,7 +187,7 @@ window.Chem.onReady(function () {
           continue;
         }
       }
-      if (newPos.distanceTo(bullet.start) > bullet.range) {
+      if (newPos.distance(bullet.start) > bullet.range) {
         delete bullets[bullet.id];
         continue;
       }
@@ -233,7 +230,7 @@ window.Chem.onReady(function () {
           for (var x = -crewLosRadius; x < crewLosRadius; ++x) {
             var targetPos = loc.offset(x, y);
             if (! inGrid(targetPos)) continue;
-            if (targetPos.distanceTo(entity.pos) <= crewLosRadius) {
+            if (targetPos.distance(entity.pos) <= crewLosRadius) {
               if (!grid.cell(targetPos).explored) {
                 explore(entity, targetPos);
               }
@@ -269,13 +266,13 @@ window.Chem.onReady(function () {
       }
 
       function onAttack(attackTarget) {
-        if (attackTarget.pos.floored().distanceTo(entity.pos.floored()) <= entityAttackRadius) {
+        if (attackTarget.pos.floored().distance(entity.pos.floored()) <= entityAttackRadius) {
           onEntityAttacked(attackTarget, entity);
           changeEntityHealth(attackTarget, -entity.attackAmt * dx);
         }
       }
       function onChop(chopPos) {
-        if (chopPos.floored().distanceTo(entity.pos.floored()) <= entityActionRadius) {
+        if (chopPos.floored().distance(entity.pos.floored()) <= entityActionRadius) {
           var chopCell = grid.cell(chopPos);
           plant = chopCell.plant;
           if (plant && (! plant.growing)) {
@@ -291,7 +288,7 @@ window.Chem.onReady(function () {
         }
       }
       function onPlant(plantInput) {
-        if (plantInput.pos.floored().distanceTo(entity.pos.floored()) <= entityActionRadius) {
+        if (plantInput.pos.floored().distance(entity.pos.floored()) <= entityActionRadius) {
           var plantCell = grid.cell(plantInput.pos);
           if (plantCell.terrain.plantable && resources.seed > 0 && plantCell.empty()) {
             plantCell.setGrowingPlant(plantInput.type);
@@ -301,7 +298,7 @@ window.Chem.onReady(function () {
         }
       }
       function onBuild(buildInput) {
-        if (buildInput.pos.floored().distanceTo(entity.pos.floored()) > entityActionRadius) return;
+        if (buildInput.pos.floored().distance(entity.pos.floored()) > entityActionRadius) return;
         var buildCell = grid.cell(buildInput.pos);
         if (! buildCell.terrain.buildable) return;
         if (! buildCell.empty()) return;
@@ -312,7 +309,7 @@ window.Chem.onReady(function () {
           id: nextId(),
           health: 1,
           type: buildInput.type,
-          sprite: new Chem.Sprite('turret', {batch: batch}),
+          sprite: new chem.Sprite('turret', {batch: batch}),
           direction: v(1, 0),
           cooldown: 1,
           cooldownAmt: 0.05,
@@ -424,7 +421,7 @@ window.Chem.onReady(function () {
         direction: v(1, 0),
         speed: 0,
       },
-      sprite: new Chem.Sprite(graphic, { batch: batch, }),
+      sprite: new chem.Sprite(graphic, { batch: batch, }),
       tasks: [],
     };
     cell.entity = mutant;
@@ -529,7 +526,7 @@ window.Chem.onReady(function () {
 
   function getWithinRange(entity, dest, radius) {
     var task = entity.tasks[0];
-    var dist = entity.pos.floored().distanceTo(dest.floored());
+    var dist = entity.pos.floored().distance(dest.floored());
     if (dist === 0 && task.state !== 'path') {
       // find a safe neighbor to go to - we're in our own way.
       var neighbor = closestSafeNeighbor(entity);
@@ -581,7 +578,7 @@ window.Chem.onReady(function () {
   function followPath(entity) {
     var task = entity.tasks[0];
     var nextNode = task.path[0].offset(0.5, 0.5);
-    if (nextNode.distanceTo(entity.pos) < crewMaxSpeed) {
+    if (nextNode.distance(entity.pos) < crewMaxSpeed) {
       task.path.shift();
       if (task.path.length === 0) {
         // done following path
@@ -647,7 +644,7 @@ window.Chem.onReady(function () {
           } else if (cell.plant.growing) {
             var index = Math.floor((1 - cell.plant.growing) * growingAnimation.frames.length);
             var frame = growingAnimation.frames[index];
-            context.drawImage(Chem.spritesheet, frame.pos.x, frame.pos.y, frame.size.x, frame.size.y,
+            context.drawImage(chem.resources.spritesheet, frame.pos.x, frame.pos.y, frame.size.x, frame.size.y,
                 pos.x, pos.y, frame.size.x, frame.size.y);
           } else {
             context.drawImage(plantImg, pos.x, pos.y);
@@ -694,7 +691,7 @@ window.Chem.onReady(function () {
     // highlight the square you're mouse overing
     var task;
     if (anyCrewSelected) {
-      var mouseCellPos = fromScreen(engine.mouse_pos).floor();
+      var mouseCellPos = fromScreen(engine.mousePos).floor();
       if (inGrid(mouseCellPos)) {
         var mouseCell = grid.cell(mouseCellPos);
         var screenMouseCellPos = toScreen(mouseCellPos);
@@ -813,8 +810,8 @@ window.Chem.onReady(function () {
   }
 
   function onMapRightClick() {
-    var shift = engine.buttonState(Chem.Button.Key_Shift);
-    var pos = fromScreen(engine.mouse_pos);
+    var shift = engine.buttonState(chem.button.KeyShift);
+    var pos = fromScreen(engine.mousePos);
     var command = crewOptions[selectedCrewOption];
     for (var id in crew) {
       var member = crew[id];
@@ -904,7 +901,7 @@ window.Chem.onReady(function () {
   }
 
   function onMapLeftClick() {
-    var pos = engine.mouse_pos;
+    var pos = engine.mousePos;
     for (var id in crew) {
       var member = crew[id];
       var sprite = member.sprite;
@@ -913,7 +910,7 @@ window.Chem.onReady(function () {
         pos.x <= sprite.pos.x + sprite.size.x / 2 &&
         pos.y >= sprite.pos.y - sprite.size.y &&
         pos.y <= sprite.pos.y);
-      var shift = engine.buttonState(Chem.Button.Key_Shift) || engine.buttonState(Chem.Button.Key_Ctrl);
+      var shift = engine.buttonState(chem.button.KeyShift) || engine.buttonState(chem.button.KeyCtrl);
       member.selected = (shift ? member.selected : false) || selected;
     }
   }
@@ -924,14 +921,14 @@ window.Chem.onReady(function () {
   }
 
   function distanceToNearestEntity(pos, entities) {
-    var min_distance = Infinity;
+    var minDistance = Infinity;
     for (var id in entities) {
       var entity = entities[id];
-      var distance = entity.pos.distanceTo(pos);
-      if (distance < min_distance)
-        min_distance = distance;
+      var distance = entity.pos.distance(pos);
+      if (distance < minDistance)
+        minDistance = distance;
     }
-    return min_distance;
+    return minDistance;
   }
 
   function visibilityAt(pos) {
@@ -957,7 +954,7 @@ window.Chem.onReady(function () {
     entity.deleted = true; // for lingering references
     entity.sprite.setAnimationName(entity.graphic.replace('mutant', '') + 'die');
     entity.sprite.setFrameIndex(0);
-    entity.sprite.on('animation_end', function() {
+    entity.sprite.on('animationend', function() {
       entity.sprite.delete();
     });
     delete entity.entities[entity.id];
@@ -997,7 +994,7 @@ window.Chem.onReady(function () {
         direction: v(1, 0),
         speed: 0,
       },
-      sprite: new Chem.Sprite(graphic, {
+      sprite: new chem.Sprite(graphic, {
         batch: batch,
       }),
       tasks: [],
@@ -1033,13 +1030,13 @@ window.Chem.onReady(function () {
       // for mutants because we don't want mutants to be so careful
       var damage = human ? terrainAtNode.damage : 0;
       var unsafePenalty = damage * -20000;
-      return node.distanceTo(dest) + unsafePenalty;
+      return node.distance(dest) + unsafePenalty;
     }
     function exactIsEnd(node) {
       return node.equals(dest);
     }
     function isEndFromRadius(node) {
-      return node.distanceTo(dest) <= endRadius;
+      return node.distance(dest) <= endRadius;
     }
   }
 
@@ -1109,7 +1106,7 @@ window.Chem.onReady(function () {
       var cell = grid.cell(neighbor);
       var damage = entity.human ? cell.terrain.damage : cell.terrain.mutantDamage;
       if (damage < 0) return;
-      var dist = neighbor.distanceTo(entity.pos);
+      var dist = neighbor.distance(entity.pos);
       if (best == null || dist < bestDist) {
         bestDist = dist;
         best = neighbor;
@@ -1146,7 +1143,7 @@ window.Chem.onReady(function () {
         {
           return false;
         }
-        if (maxDistance != null && pt.distanceTo(start) > maxDistance) {
+        if (maxDistance != null && pt.distance(start) > maxDistance) {
           return false;
         }
         var cell = grid.cell(pt);
@@ -1161,7 +1158,7 @@ window.Chem.onReady(function () {
     };
   }
   function pointDistance(a, b) {
-    return a.distanceTo(b);
+    return a.distance(b);
   }
   function nextId() {
     return "" + lastId++;
@@ -1218,7 +1215,7 @@ window.Chem.onReady(function () {
           var cell = grid.cell(it);
           var entity = cell.entity;
           if (!entity || entity.human) continue;
-          var dist = center.distanceTo(entity.pos);
+          var dist = center.distance(entity.pos);
           if (bestDist == null || dist < bestDist) {
             bestDist = dist;
             best = entity;
@@ -1228,7 +1225,7 @@ window.Chem.onReady(function () {
       turret.target = best;
     }
     function targetOutOfRange() {
-      var dist = turret.target.pos.distanceTo(center);
+      var dist = turret.target.pos.distance(center);
       return dist > turret.losRadius;
     }
   }

@@ -1,12 +1,9 @@
-//depend "chem"
-window.Chem.onReady(function () {
-  var Chem = window.Chem
-    , v = Chem.Vec2d
-    , exports = window.Holocaust || (window.Holocaust = {})
-
+var chem = require('chem');
+chem.onReady(function () {
+  var v = chem.vec2d;
   var lastId = 0;
 
-  exports.Grid = Grid;
+  module.exports = Grid;
 
   Grid.terrains = {
     treeAdult: { // dummy, used for generation and then gets replaced
@@ -15,7 +12,7 @@ window.Chem.onReady(function () {
     safe: {
       name: "Safe",
       color: '#48C13C',
-      texture: Chem.getImage('dirt'),
+      texture: chem.resources.getImage('dirt'),
       walkable: true,
       plantable: true,
       buildable: true,
@@ -26,7 +23,7 @@ window.Chem.onReady(function () {
     fatal: {
       name: "Fatal",
       color: '#860600',
-      texture: Chem.getImage('danger'),
+      texture: chem.resources.getImage('danger'),
       walkable: true,
       plantable: false,
       buildable: false,
@@ -37,7 +34,7 @@ window.Chem.onReady(function () {
     oxygenated: {
       name: "Oxygenated Land",
       color: '#3CC162',
-      texture: Chem.getImage('oxygendirt'),
+      texture: chem.resources.getImage('oxygendirt'),
       walkable: true,
       plantable: true,
       buildable: true,
@@ -48,7 +45,7 @@ window.Chem.onReady(function () {
     danger: {
       name: "Danger",
       color: '#F30B00',
-      texture: Chem.getImage('dirtno2'),
+      texture: chem.resources.getImage('dirtno2'),
       walkable: true,
       plantable: true,
       buildable: false,
@@ -59,7 +56,7 @@ window.Chem.onReady(function () {
     cleanWater: {
       name: "Clean Water",
       color: '#548FC4',
-      texture: Chem.getImage('water'),
+      texture: chem.resources.getImage('water'),
       walkable: false,
       plantable: false,
       buildable: false,
@@ -70,7 +67,7 @@ window.Chem.onReady(function () {
     contaminatedWater: {
       name: "Contaminated Water",
       color: '#6D2A49',
-      texture: Chem.getImage('evilwater'),
+      texture: chem.resources.getImage('evilwater'),
       walkable: false,
       plantable: false,
       buildable: false,
