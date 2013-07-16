@@ -8,8 +8,9 @@
   "author": "Andrew Kelley <superjoe30@gmail.com>",
   "license": "BSD",
   "dependencies": {
-    "chem": "~0.4.1",
-    "chem-cli": "~0.4.0",
-    "a-star": "~0.1.0"
+    "chem": "~0.5.0",
+    "chem-cli": "~0.5.2",
+    "a-star": "~0.1.0",
+    "perlin-noise": "0.0.1"
   }
 }

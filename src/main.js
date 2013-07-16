@@ -97,6 +97,9 @@ chem.onReady(function () {
   var mutantSpawnInterval = 1000;
   var nextMutantSpawn = 0;
 
+  var fpsLabel = engine.createFpsLabel();
+  fpsLabel.fillStyle = "#ffffff";
+
   createSafeStartArea();
   generateMiniMap();
 
@@ -670,7 +673,7 @@ chem.onReady(function () {
       building.sprite.pos = toScreen(building.cell.pos.offset(0.5, 0.5));
       building.sprite.rotation = building.direction.angle();
     }
-    engine.draw(batch);
+    batch.draw(context);
 
     // draw names and health
     context.save();
@@ -764,8 +767,7 @@ chem.onReady(function () {
         miniMapBoxSize.x, miniMapBoxSize.y);
 
     // draw a little fps counter in the corner
-    context.fillStyle = '#ffffff';
-    engine.drawFps();
+    fpsLabel.draw(context);
 
     function drawEntityHealth(entity) {
       context.globalAlpha = 0.8 * entity.sprite.alpha;

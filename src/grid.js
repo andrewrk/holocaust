@@ -1,4 +1,5 @@
 var chem = require('chem');
+var generatePerlinNoise = require('perlin-noise').generatePerlinNoise;
 chem.onReady(function () {
   var v = chem.vec2d;
   var lastId = 0;
@@ -114,12 +115,12 @@ chem.onReady(function () {
     var x;
     for (var y = 0; y < gridSize.y; ++y) {
       var gridRow = grid[y];
-      var perlinRow = perlinNoise[y];
       for (x = 0; x < gridSize.x; ++x) {
         // just in case the weights don't add up to 1
         gridRow[x] = new Cell(v(x, y), Grid.terrains.safe);
         for (var i = 0; i < terrainThresholds.length; ++i) {
-          if (perlinRow[x] < terrainThresholds[i].threshold) {
+          var perlinValue = perlinNoise[y * gridSize.x + x];
+          if (perlinValue < terrainThresholds[i].threshold) {
             gridRow[x].terrain = terrainThresholds[i].terrain;
             break;
           }
@@ -159,77 +160,6 @@ chem.onReady(function () {
         itRadius += Math.floor(Math.random() * 3) - 1;
       }
       return count;
-    }
-  }
-  function generatePerlinNoise(width, height, options) {
-    options = options || {};
-    var octaveCount = options.octaveCount || 4;
-    var amplitude = options.amplitude || 0.1;
-    var persistence = options.persistence || 0.2;
-    var whiteNoise = generateWhiteNoise(width, height);
-
-    var smoothNoiseList = new Array(octaveCount);
-    var i, y, x, row;
-    for (i = 0; i < octaveCount; ++i) {
-      smoothNoiseList[i] = generateSmoothNoise(i);
-    }
-    var perlinNoise = createArray(width, height);
-    var totalAmplitude = 0;
-    // blend noise together
-    for (i = octaveCount - 1; i >= 0; --i) {
-      amplitude *= persistence;
-      totalAmplitude += amplitude;
-
-      for (y = 0; y < height; ++y) {
-        for (x = 0; x < width; ++x) {
-          perlinNoise[y][x] = perlinNoise[y][x] || 0;
-          perlinNoise[y][x] += smoothNoiseList[i][y][x] * amplitude;
-        }
-      }
-    }
-    // normalization
-    for (y = 0; y < height; ++y) {
-      for (x = 0; x < width; ++x) {
-        perlinNoise[y][x] /= totalAmplitude;
-      }
-    }
-    return perlinNoise;
-    function generateSmoothNoise(octave) {
-      var noise = createArray(width, height);
-      var samplePeriod = Math.pow(2, octave);
-      var sampleFrequency = 1 / samplePeriod;
-      for (var y = 0; y < height; ++y) {
-        var row = noise[y];
-        var sampleY0 = Math.floor(y / samplePeriod) * samplePeriod;
-        var sampleY1 = (sampleY0 + samplePeriod) % height;
-        var vertBlend = (y - sampleY0) * sampleFrequency;
-        for (var x = 0; x < width; ++x) {
-          var sampleX0 = Math.floor(x / samplePeriod) * samplePeriod;
-          var sampleX1 = (sampleX0 + samplePeriod) % width;
-          var horizBlend = (x - sampleX0) * sampleFrequency;
-
-          // blend top two corners
-          var top = interpolate(whiteNoise[sampleY0][sampleX0], whiteNoise[sampleY1][sampleX0], vertBlend);
-          // blend bottom two corners
-          var bottom = interpolate(whiteNoise[sampleY0][sampleX1], whiteNoise[sampleY1][sampleX1], vertBlend);
-          // final blend
-          row[x] = interpolate(top, bottom, horizBlend);
-        }
-      }
-      return noise;
-    }
-    function generateWhiteNoise() {
-      var noise = createArray(width, height);
-      for (var y = 0; y < height; ++y) {
-        var row = noise[y];
-        for (var x = 0; x < width; ++x) {
-          row[x] = Math.random();
-        }
-      }
-      return noise;
-    }
-    function interpolate(x0, x1, alpha) {
-      return x0 * (1 - alpha) + alpha * x1;
     }
   }
   function createArray(w, h) {
